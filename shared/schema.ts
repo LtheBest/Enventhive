@@ -224,6 +224,10 @@ export const transactions = pgTable("transactions", {
   status: transactionStatusEnum("status").default("pending").notNull(),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
   stripeChargeId: text("stripe_charge_id"),
+  stripeSessionId: text("stripe_session_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeInvoiceId: text("stripe_invoice_id"),
+  paymentMethod: varchar("payment_method", { length: 50 }),
   billingCycle: billingCycleEnum("billing_cycle"),
   failureReason: text("failure_reason"),
   paidAt: timestamp("paid_at"),
@@ -231,6 +235,7 @@ export const transactions = pgTable("transactions", {
 }, (table) => ({
   companyIdx: index("transactions_company_idx").on(table.companyId),
   stripePaymentIntentIdx: index("transactions_stripe_payment_intent_idx").on(table.stripePaymentIntentId),
+  stripeSubscriptionIdx: index("transactions_stripe_subscription_idx").on(table.stripeSubscriptionId),
   statusIdx: index("transactions_status_idx").on(table.status),
 }));
 

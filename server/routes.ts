@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import authRoutes from "./routes/auth";
 import registrationRoutes from "./routes/registration";
+import stripeRoutes from "./routes/stripe";
 import { apiLimiter } from "./auth/rateLimiter";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -13,6 +14,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Registration routes
   app.use('/api/registration', registrationRoutes);
+
+  // Stripe payment routes
+  app.use('/api/stripe', stripeRoutes);
 
   // TODO: Add other routes here
   // app.use('/api/companies', companyRoutes);
