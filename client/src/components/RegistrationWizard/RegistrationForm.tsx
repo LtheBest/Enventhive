@@ -98,9 +98,6 @@ export function RegistrationForm() {
       // Get form data
       const formData = methods.getValues();
       
-      console.log('[DEBUG] Wizard state:', state);
-      console.log('[DEBUG] Form data:', formData);
-      
       // Build registration payload from React Hook Form (single source of truth)
       const payload = {
         // Step 1: Company info (from RHF)

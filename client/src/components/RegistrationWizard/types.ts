@@ -52,10 +52,10 @@ export const step4Schema = step4BaseSchema.refine(
 
 // Nested registration schema (matches WizardState structure)
 export const nestedRegistrationSchema = z.object({
-  step1: step1Schema.partial(),
-  step2: step2Schema.partial(),
-  step3: step3Schema.partial(),
-  step4: step4BaseSchema.partial(),
+  step1: step1Schema.partial().default({}),
+  step2: step2Schema.partial().default({}),
+  step3: step3Schema.partial().default({}),
+  step4: step4BaseSchema.partial().default({}),
 });
 
 // Complete flat registration schema (for final validation)

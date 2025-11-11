@@ -12,11 +12,16 @@ import type { NestedRegistrationData, Step2Data } from "./types";
 
 interface AddressSuggestion {
   label: string;
-  street: string;
+  name: string;
+  street?: string;
+  housenumber?: string;
+  postcode: string;  // Backend returns "postcode" not "postalCode"
   city: string;
-  postalCode: string;
-  latitude: number;
-  longitude: number;
+  context: string;
+  coordinates?: {
+    lon: number;
+    lat: number;
+  };
 }
 
 interface Step2Props {
@@ -73,13 +78,22 @@ export function Step2AddressForm({ onNext, onBack, onAddressValidated, addressVa
   };
 
   const handleSuggestionSelect = (suggestion: AddressSuggestion) => {
-    setValue("step2.street", suggestion.street);
-    setValue("step2.city", suggestion.city);
-    setValue("step2.postalCode", suggestion.postalCode);
-    setValue("step2.latitude", suggestion.latitude);
-    setValue("step2.longitude", suggestion.longitude);
+    // Build full street address (housenumber + street)
+    const fullStreet = suggestion.housenumber 
+      ? `${suggestion.housenumber} ${suggestion.street || suggestion.name}`
+      : (suggestion.street || suggestion.name);
     
-    setLastValidatedAddress(`${suggestion.street}, ${suggestion.city} ${suggestion.postalCode}`);
+    setValue("step2.street", fullStreet);
+    setValue("step2.city", suggestion.city);
+    setValue("step2.postalCode", suggestion.postcode);
+    
+    // Set coordinates if available
+    if (suggestion.coordinates) {
+      setValue("step2.latitude", suggestion.coordinates.lat);
+      setValue("step2.longitude", suggestion.coordinates.lon);
+    }
+    
+    setLastValidatedAddress(`${fullStreet}, ${suggestion.city} ${suggestion.postcode}`);
     setIsAddressSelected(true);
     setIsPopoverOpen(false);
     onAddressValidated(true);
@@ -175,9 +189,9 @@ export function Step2AddressForm({ onNext, onBack, onAddressValidated, addressVa
                             }`}
                           />
                           <div className="flex flex-col">
-                            <span className="font-medium">{suggestion.street}</span>
+                            <span className="font-medium">{suggestion.name}</span>
                             <span className="text-sm text-muted-foreground">
-                              {suggestion.city} {suggestion.postalCode}
+                              {suggestion.city} {suggestion.postcode}
                             </span>
                           </div>
                         </CommandItem>
@@ -274,6 +288,18 @@ export function Step2AddressForm({ onNext, onBack, onAddressValidated, addressVa
             />
           </div>
         </div>
+
+        {/* Hidden fields for latitude/longitude (populated by address selection) */}
+        <Controller
+          name="step2.latitude"
+          control={control}
+          render={({ field }) => <input type="hidden" {...field} />}
+        />
+        <Controller
+          name="step2.longitude"
+          control={control}
+          render={({ field }) => <input type="hidden" {...field} />}
+        />
 
         {/* Navigation Buttons */}
         <div className="flex justify-between pt-4">
