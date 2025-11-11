@@ -7,6 +7,9 @@ import { insertCompanySchema, insertUserSchema } from '@shared/schema';
 import { registerLimiter } from '../auth/rateLimiter';
 import { generateAccessToken, generateRefreshToken } from '../auth/jwt';
 import { z } from 'zod';
+import { withTransaction } from '../utils/transaction';
+import { validateSirenWithApi } from '../services/siren';
+import { searchFrenchAddresses, validateFrenchAddress } from '../services/address';
 
 const router = Router();
 
@@ -118,55 +121,60 @@ async function handleFreeRegistration(
   res: Response
 ) {
   try {
-    // Hash password
+    // Hash password outside transaction
     const passwordHash = await bcrypt.hash(data.password, 10);
 
-    // Create company
-    const [company] = await db.insert(companies).values({
-      name: data.companyName,
-      siren: data.siren,
-      organizationType: data.organizationType,
-      email: data.companyEmail.toLowerCase(),
-      phone: data.phone || null,
-      address: data.address,
-      city: data.city,
-      postalCode: data.postalCode || null,
-      isActive: true,
-    }).returning();
+    // Execute all database operations in a transaction
+    const result = await withTransaction(async (tx) => {
+      // Create company
+      const [company] = await tx.insert(companies).values({
+        name: data.companyName,
+        siren: data.siren,
+        organizationType: data.organizationType,
+        email: data.companyEmail.toLowerCase(),
+        phone: data.phone || null,
+        address: data.address,
+        city: data.city,
+        postalCode: data.postalCode || null,
+        isActive: true,
+      }).returning();
 
-    // Create user
-    const [user] = await db.insert(users).values({
-      email: data.userEmail.toLowerCase(),
-      passwordHash,
-      role: 'company',
-      companyId: company.id,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      isActive: true,
-    }).returning();
+      // Create user
+      const [user] = await tx.insert(users).values({
+        email: data.userEmail.toLowerCase(),
+        passwordHash,
+        role: 'company',
+        companyId: company.id,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        isActive: true,
+      }).returning();
 
-    // Create plan state
-    await db.insert(companyPlanState).values({
-      companyId: company.id,
-      planId: plan.id,
-      quotePending: false,
+      // Create plan state
+      await tx.insert(companyPlanState).values({
+        companyId: company.id,
+        planId: plan.id,
+        quotePending: false,
+      });
+
+      // Log plan history
+      await tx.insert(planHistory).values({
+        companyId: company.id,
+        oldPlanId: null,
+        newPlanId: plan.id,
+        reason: 'Initial registration',
+        changedByUserId: user.id,
+      });
+
+      return { company, user };
     });
 
-    // Log plan history
-    await db.insert(planHistory).values({
-      companyId: company.id,
-      oldPlanId: null,
-      newPlanId: plan.id,
-      reason: 'Initial registration',
-      changedByUserId: user.id,
-    });
-
-    // Generate tokens
+    // Generate tokens after successful transaction
     const accessToken = generateAccessToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      companyId: company.id,
+      userId: result.user.id,
+      email: result.user.email,
+      role: result.user.role,
+      companyId: result.company.id,
     });
 
     return res.status(201).json({
@@ -174,16 +182,16 @@ async function handleFreeRegistration(
       message: 'Compte créé avec succès',
       accessToken,
       user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        companyId: company.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        id: result.user.id,
+        email: result.user.email,
+        role: result.user.role,
+        companyId: result.company.id,
+        firstName: result.user.firstName,
+        lastName: result.user.lastName,
       },
       company: {
-        id: company.id,
-        name: company.name,
+        id: result.company.id,
+        name: result.company.name,
       },
       redirectTo: '/dashboard',
     });
@@ -200,32 +208,53 @@ async function handlePaidRegistration(
   res: Response
 ) {
   try {
-    // Hash password
+    // Hash password outside transaction
     const passwordHash = await bcrypt.hash(data.password, 10);
 
-    // Create company
-    const [company] = await db.insert(companies).values({
-      name: data.companyName,
-      siren: data.siren,
-      organizationType: data.organizationType,
-      email: data.companyEmail.toLowerCase(),
-      phone: data.phone || null,
-      address: data.address,
-      city: data.city,
-      postalCode: data.postalCode || null,
-      isActive: true,
-    }).returning();
+    // Execute all database operations in a transaction
+    const result = await withTransaction(async (tx) => {
+      // Create company
+      const [company] = await tx.insert(companies).values({
+        name: data.companyName,
+        siren: data.siren,
+        organizationType: data.organizationType,
+        email: data.companyEmail.toLowerCase(),
+        phone: data.phone || null,
+        address: data.address,
+        city: data.city,
+        postalCode: data.postalCode || null,
+        isActive: true,
+      }).returning();
 
-    // Create user
-    const [user] = await db.insert(users).values({
-      email: data.userEmail.toLowerCase(),
-      passwordHash,
-      role: 'company',
-      companyId: company.id,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      isActive: true,
-    }).returning();
+      // Create user
+      const [user] = await tx.insert(users).values({
+        email: data.userEmail.toLowerCase(),
+        passwordHash,
+        role: 'company',
+        companyId: company.id,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        isActive: true,
+      }).returning();
+
+      // Create plan state (pending payment)
+      await tx.insert(companyPlanState).values({
+        companyId: company.id,
+        planId: plan.id,
+        quotePending: false,
+      });
+
+      // Log plan history
+      await tx.insert(planHistory).values({
+        companyId: company.id,
+        oldPlanId: null,
+        newPlanId: plan.id,
+        reason: 'Registration - payment pending',
+        changedByUserId: user.id,
+      });
+
+      return { company, user };
+    });
 
     // Calculate amount based on billing cycle
     const amount = data.billingCycle === 'annual' 
@@ -239,12 +268,12 @@ async function handlePaidRegistration(
       message: 'Compte créé, paiement requis',
       requiresPayment: true,
       user: {
-        id: user.id,
-        email: user.email,
+        id: result.user.id,
+        email: result.user.email,
       },
       company: {
-        id: company.id,
-        name: company.name,
+        id: result.company.id,
+        name: result.company.name,
       },
       payment: {
         planId: plan.id,
@@ -268,62 +297,67 @@ async function handleQuoteRequiredRegistration(
   res: Response
 ) {
   try {
-    // Hash password
+    // Hash password outside transaction
     const passwordHash = await bcrypt.hash(data.password, 10);
 
-    // Create company
-    const [company] = await db.insert(companies).values({
-      name: data.companyName,
-      siren: data.siren,
-      organizationType: data.organizationType,
-      email: data.companyEmail.toLowerCase(),
-      phone: data.phone || null,
-      address: data.address,
-      city: data.city,
-      postalCode: data.postalCode || null,
-      isActive: true,
-    }).returning();
+    // Execute all database operations in a transaction
+    const result = await withTransaction(async (tx) => {
+      // Create company
+      const [company] = await tx.insert(companies).values({
+        name: data.companyName,
+        siren: data.siren,
+        organizationType: data.organizationType,
+        email: data.companyEmail.toLowerCase(),
+        phone: data.phone || null,
+        address: data.address,
+        city: data.city,
+        postalCode: data.postalCode || null,
+        isActive: true,
+      }).returning();
 
-    // Create user
-    const [user] = await db.insert(users).values({
-      email: data.userEmail.toLowerCase(),
-      passwordHash,
-      role: 'company',
-      companyId: company.id,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      isActive: true,
-    }).returning();
+      // Create user
+      const [user] = await tx.insert(users).values({
+        email: data.userEmail.toLowerCase(),
+        passwordHash,
+        role: 'company',
+        companyId: company.id,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        isActive: true,
+      }).returning();
 
-    // Get DECOUVERTE plan for temporary access
-    const [freePlan] = await db
-      .select()
-      .from(plans)
-      .where(eq(plans.tier, 'DECOUVERTE'))
-      .limit(1);
+      // Get DECOUVERTE plan for temporary access
+      const [freePlan] = await tx
+        .select()
+        .from(plans)
+        .where(eq(plans.tier, 'DECOUVERTE'))
+        .limit(1);
 
-    // Create plan state with quote pending
-    await db.insert(companyPlanState).values({
-      companyId: company.id,
-      planId: freePlan!.id, // Temporarily on free plan
-      quotePending: true,
+      // Create plan state with quote pending
+      await tx.insert(companyPlanState).values({
+        companyId: company.id,
+        planId: freePlan!.id, // Temporarily on free plan
+        quotePending: true,
+      });
+
+      // Log plan history
+      await tx.insert(planHistory).values({
+        companyId: company.id,
+        oldPlanId: null,
+        newPlanId: freePlan!.id,
+        reason: `Quote requested for ${plan.name}`,
+        changedByUserId: user.id,
+      });
+
+      return { company, user };
     });
 
-    // Log plan history
-    await db.insert(planHistory).values({
-      companyId: company.id,
-      oldPlanId: null,
-      newPlanId: freePlan!.id,
-      reason: `Quote requested for ${plan.name}`,
-      changedByUserId: user.id,
-    });
-
-    // Generate tokens
+    // Generate tokens after successful transaction
     const accessToken = generateAccessToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      companyId: company.id,
+      userId: result.user.id,
+      email: result.user.email,
+      role: result.user.role,
+      companyId: result.company.id,
     });
 
     return res.status(201).json({
@@ -332,16 +366,16 @@ async function handleQuoteRequiredRegistration(
       requiresQuote: true,
       requestedPlan: plan.name,
       user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        companyId: company.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        id: result.user.id,
+        email: result.user.email,
+        role: result.user.role,
+        companyId: result.company.id,
+        firstName: result.user.firstName,
+        lastName: result.user.lastName,
       },
       company: {
-        id: company.id,
-        name: company.name,
+        id: result.company.id,
+        name: result.company.name,
       },
       accessToken,
       redirectTo: '/quote-pending',
@@ -352,7 +386,7 @@ async function handleQuoteRequiredRegistration(
   }
 }
 
-// Validate SIREN (basic French SIREN validation)
+// Validate SIREN using government API
 router.post('/validate-siren', async (req: Request, res: Response) => {
   try {
     const { siren } = req.body;
@@ -364,7 +398,7 @@ router.post('/validate-siren', async (req: Request, res: Response) => {
       });
     }
 
-    // Check if SIREN already exists
+    // Check if SIREN already exists in our database
     const existing = await db
       .select()
       .from(companies)
@@ -374,14 +408,79 @@ router.post('/validate-siren', async (req: Request, res: Response) => {
     if (existing.length > 0) {
       return res.status(200).json({ 
         valid: false, 
-        error: 'Ce SIREN est déjà enregistré' 
+        error: 'Ce SIREN est déjà enregistré dans notre système' 
       });
     }
 
-    return res.json({ valid: true });
+    // Validate SIREN with external API
+    const validationResult = await validateSirenWithApi(siren);
+
+    if (!validationResult.valid) {
+      return res.status(200).json({
+        valid: false,
+        error: validationResult.error,
+      });
+    }
+
+    // Check if company is active
+    if (validationResult.active === false) {
+      return res.status(200).json({
+        valid: false,
+        error: 'Cette entreprise n\'est plus active',
+      });
+    }
+
+    return res.json({
+      valid: true,
+      companyName: validationResult.companyName,
+      category: validationResult.category,
+    });
   } catch (error) {
     console.error('SIREN validation error:', error);
     return res.status(500).json({ error: 'Erreur lors de la validation du SIREN' });
+  }
+});
+
+// French address autocomplete
+router.get('/address-autocomplete', async (req: Request, res: Response) => {
+  try {
+    const query = req.query.q as string;
+    const limit = parseInt(req.query.limit as string) || 5;
+
+    if (!query || query.trim().length < 3) {
+      return res.json({ suggestions: [] });
+    }
+
+    const suggestions = await searchFrenchAddresses(query, limit);
+
+    return res.json({ suggestions });
+  } catch (error) {
+    console.error('Address autocomplete error:', error);
+    return res.status(500).json({ error: 'Erreur lors de la recherche d\'adresses' });
+  }
+});
+
+// Validate French address
+router.post('/validate-address', async (req: Request, res: Response) => {
+  try {
+    const { address } = req.body;
+
+    if (!address || address.trim().length < 5) {
+      return res.status(400).json({
+        valid: false,
+        error: 'L\'adresse est trop courte',
+      });
+    }
+
+    const isValid = await validateFrenchAddress(address);
+
+    return res.json({
+      valid: isValid,
+      error: isValid ? undefined : 'Adresse non trouvée dans la base nationale',
+    });
+  } catch (error) {
+    console.error('Address validation error:', error);
+    return res.status(500).json({ error: 'Erreur lors de la validation de l\'adresse' });
   }
 });
 
