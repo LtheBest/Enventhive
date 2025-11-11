@@ -18,7 +18,7 @@ export function RegistrationForm() {
   const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const { login } = useAuth();
+  const { authenticateWithToken } = useAuth();
 
   // Parse step from URL query params (using wouter's useSearch)
   const searchParams = new URLSearchParams(search);
@@ -124,6 +124,13 @@ export function RegistrationForm() {
         password: formData.step4?.password,
       };
 
+      console.log('[RegistrationForm] Submitting payload:', {
+        ...payload,
+        password: '***',
+        planId: payload.planId,
+        planTier: formData.step3?.planTier,
+      });
+
       // Call registration API
       const response = await fetch('/api/registration/register', {
         method: 'POST',
@@ -138,23 +145,20 @@ export function RegistrationForm() {
 
       const data = await response.json();
 
-      // Ensure credentials are present before login
-      if (!formData.step4.email || !formData.step4.password) {
-        throw new Error('Identifiants manquants après l\'enregistrement');
+      // Authenticate using the token (loads user data without redirect)
+      if (data.accessToken) {
+        await authenticateWithToken(data.accessToken);
       }
 
-      // Handle based on plan tier
+      // Handle redirect based on plan tier
       if (data.requiresPayment && data.stripeCheckoutUrl) {
-        // ESSENTIEL plan: Auto-login then redirect to Stripe
-        await login(formData.step4.email, formData.step4.password);
+        // ESSENTIEL plan: Redirect to Stripe checkout
         window.location.href = data.stripeCheckoutUrl;
       } else if (data.requiresQuote) {
-        // PRO/PREMIUM: Auto-login then redirect to dashboard with quote message
-        await login(formData.step4.email, formData.step4.password);
-        setLocation('/?quote_pending=true');
+        // PRO/PREMIUM: Redirect to dashboard with quote pending
+        setLocation('/dashboard');
       } else {
-        // DECOUVERTE: Auto-login then redirect to dashboard
-        await login(formData.step4.email, formData.step4.password);
+        // DECOUVERTE: Redirect to dashboard
         setLocation('/dashboard');
       }
     } catch (error: any) {

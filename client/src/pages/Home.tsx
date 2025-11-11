@@ -128,8 +128,8 @@ export default function Home() {
           <nav className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-sm hover:text-primary transition-colors">Fonctionnalités</a>
             <a href="#pricing" className="text-sm hover:text-primary transition-colors">Tarifs</a>
-            <Link href="/login">
-              <a className="text-sm hover:text-primary transition-colors">Connexion</a>
+            <Link href="/login" className="text-sm hover:text-primary transition-colors">
+              Connexion
             </Link>
             <ThemeToggle />
           </nav>

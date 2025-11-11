@@ -34,6 +34,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
+  authenticateWithToken: (token: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -148,6 +149,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadUserData();
   };
 
+  // Authenticate using an existing token (e.g., from registration)
+  // This loads user data without redirecting, allowing caller to handle navigation
+  const authenticateWithToken = async (token: string) => {
+    try {
+      localStorage.setItem('access_token', token);
+      await loadUserData();
+    } catch (error: any) {
+      console.error('Token authentication failed:', error);
+      throw error;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -158,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         refreshAuth,
+        authenticateWithToken,
       }}
     >
       {children}

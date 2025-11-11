@@ -89,18 +89,29 @@ router.post('/register', /* registerLimiter, */ async (req: Request, res: Respon
       .limit(1);
 
     if (!selectedPlan) {
+      console.error('[Registration] Invalid planId:', validatedData.planId);
       return res.status(400).json({ error: 'Plan d\'abonnement invalide' });
     }
+
+    console.log('[Registration] Selected plan:', {
+      id: selectedPlan.id,
+      name: selectedPlan.name,
+      tier: selectedPlan.tier,
+      requiresQuote: selectedPlan.requiresQuote,
+    });
 
     // Determine registration flow based on plan
     if (selectedPlan.requiresQuote) {
       // PRO or PREMIUM - requires quote approval
+      console.log('[Registration] Using quote required flow for', selectedPlan.tier);
       return handleQuoteRequiredRegistration(validatedData, selectedPlan, res);
     } else if (selectedPlan.tier === 'ESSENTIEL') {
       // ESSENTIEL - requires immediate payment
+      console.log('[Registration] Using paid registration flow');
       return handlePaidRegistration(validatedData, selectedPlan, res);
     } else {
       // DECOUVERTE - free plan, instant activation
+      console.log('[Registration] Using free registration flow');
       return handleFreeRegistration(validatedData, selectedPlan, res);
     }
   } catch (error) {
