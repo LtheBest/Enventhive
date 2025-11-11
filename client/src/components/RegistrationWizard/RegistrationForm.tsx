@@ -1,16 +1,23 @@
-import { useReducer, useEffect } from 'react';
+import { useReducer, useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent } from '@/components/ui/card';
 import { wizardReducer } from './reducer';
-import { initialWizardState, fullRegistrationSchema, FullRegistrationData } from './types';
+import { initialWizardState, nestedRegistrationSchema, NestedRegistrationData } from './types';
 import { Step1CompanyInfo } from './Step1CompanyInfo';
+import { Step2AddressForm } from './Step2AddressForm';
+import { Step3PlanSelection } from './Step3PlanSelection';
+import { Step4UserAccount } from './Step4UserAccount';
 import { ProgressStepper } from './ProgressStepper';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function RegistrationForm() {
   const [location, setLocation] = useLocation();
   const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { login } = useAuth();
 
   // Parse step from URL params
   const searchParams = new URLSearchParams(location.split('?')[1] || '');
@@ -50,14 +57,14 @@ export function RegistrationForm() {
   }, [urlStep, state.sirenValidated, state.addressValidated, state.step3.planTier]);
 
   // Initialize form with all default values
-  const methods = useForm<FullRegistrationData>({
-    resolver: zodResolver(fullRegistrationSchema),
+  const methods = useForm<NestedRegistrationData>({
+    resolver: zodResolver(nestedRegistrationSchema),
     mode: 'onBlur',
     defaultValues: {
-      ...state.step1,
-      ...state.step2,
-      ...state.step3,
-      ...state.step4,
+      step1: state.step1,
+      step2: state.step2,
+      step3: state.step3,
+      step4: state.step4,
     },
   });
 
@@ -72,6 +79,103 @@ export function RegistrationForm() {
 
   const handleMarkSirenValidated = () => {
     dispatch({ type: 'MARK_SIREN_VALIDATED' });
+  };
+
+  const handleStep2Complete = (data: any) => {
+    dispatch({ type: 'UPDATE_STEP_2', data });
+    navigateToStep(3);
+  };
+
+  const handleMarkAddressValidated = (validated: boolean) => {
+    dispatch({ type: 'SET_ADDRESS_VALIDATED', validated });
+  };
+
+  const handleStep3Complete = () => {
+    // No dispatch needed - handlePlanSelected already updated state
+    navigateToStep(4);
+  };
+
+  const handlePlanSelected = (planId: number, tier: string) => {
+    dispatch({ type: 'UPDATE_STEP_3', data: { planId, planTier: tier } });
+  };
+
+  const handleFinalSubmit = async () => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      // Get form data
+      const formData = methods.getValues();
+      
+      // Manually validate Step4 with full schema (including password match)
+      const { step4Schema } = await import('./types');
+      const step4Result = step4Schema.safeParse(formData.step4);
+      
+      if (!step4Result.success) {
+        const firstError = step4Result.error.errors[0];
+        setSubmitError(`Erreur de validation : ${firstError.message}`);
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Build registration payload
+      const payload = {
+        // Step 1: Company info
+        companyName: formData.step1.companyName,
+        siren: formData.step1.siren,
+        employeeCount: formData.step1.employeeCount,
+        
+        // Step 2: Address
+        street: formData.step2.street,
+        city: formData.step2.city,
+        postalCode: formData.step2.postalCode,
+        latitude: formData.step2.latitude,
+        longitude: formData.step2.longitude,
+        
+        // Step 3: Plan
+        planId: formData.step3.planId,
+        
+        // Step 4: User account
+        firstName: formData.step4.firstName,
+        lastName: formData.step4.lastName,
+        email: formData.step4.email,
+        password: formData.step4.password,
+      };
+
+      // Call registration API
+      const response = await fetch('/api/registration/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Handle based on plan tier
+      if (data.requiresPayment && data.stripeCheckoutUrl) {
+        // ESSENTIEL plan: Auto-login then redirect to Stripe
+        await login(formData.step4.email, formData.step4.password);
+        window.location.href = data.stripeCheckoutUrl;
+      } else if (data.requiresQuote) {
+        // PRO/PREMIUM: Auto-login then redirect to dashboard with quote message
+        await login(formData.step4.email, formData.step4.password);
+        setLocation('/?quote_pending=true');
+      } else {
+        // DECOUVERTE: Auto-login then redirect to dashboard
+        await login(formData.step4.email, formData.step4.password);
+        setLocation('/');
+      }
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      setSubmitError(error.message || 'Erreur lors de la création du compte');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -106,21 +210,30 @@ export function RegistrationForm() {
               )}
 
               {state.currentStep === 2 && (
-                <div className="text-center p-12">
-                  <p>Step 2: Address (à implémenter)</p>
-                </div>
+                <Step2AddressForm
+                  onNext={handleStep2Complete}
+                  onBack={() => navigateToStep(1)}
+                  onAddressValidated={handleMarkAddressValidated}
+                  addressValidated={state.addressValidated}
+                  defaultValues={state.step2}
+                />
               )}
 
               {state.currentStep === 3 && (
-                <div className="text-center p-12">
-                  <p>Step 3: Plan Selection (à implémenter)</p>
-                </div>
+                <Step3PlanSelection
+                  onNext={handleStep3Complete}
+                  onBack={() => navigateToStep(2)}
+                  onPlanSelected={handlePlanSelected}
+                />
               )}
 
               {state.currentStep === 4 && (
-                <div className="text-center p-12">
-                  <p>Step 4: User Account (à implémenter)</p>
-                </div>
+                <Step4UserAccount
+                  onBack={() => navigateToStep(3)}
+                  onSubmit={handleFinalSubmit}
+                  isSubmitting={isSubmitting}
+                  submitError={submitError}
+                />
               )}
             </FormProvider>
           </div>

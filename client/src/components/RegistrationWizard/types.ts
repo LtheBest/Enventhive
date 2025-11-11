@@ -15,34 +15,50 @@ export const step1Schema = z.object({
 
 // Step 2: Address
 export const step2Schema = z.object({
-  address: z.string().min(5, "L'adresse est requise"),
+  street: z.string().min(5, "L'adresse est requise"),
   city: z.string().min(2, "La ville est requise"),
-  postalCode: z.string().optional(),
+  postalCode: z.string().min(5, "Le code postal est requis"),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 // Step 3: Plan Selection
 export const step3Schema = z.object({
-  planTier: z.enum(['DECOUVERTE', 'ESSENTIEL', 'PRO', 'PREMIUM'], {
-    required_error: "Veuillez sélectionner un plan"
-  }),
-  billingCycle: z.enum(['monthly', 'annual']).optional(),
+  planId: z.number().min(1, "Veuillez sélectionner un plan"),
+  planTier: z.string().min(1, "Le plan est requis"),
 });
 
-// Step 4: User Account
-export const step4Schema = z.object({
+// Step 4: User Account (base schema without refinement)
+const step4BaseSchema = z.object({
   firstName: z.string().min(2, "Le prénom est requis"),
   lastName: z.string().min(2, "Le nom est requis"),
-  userEmail: z.string().email("Email invalide"),
+  email: z.string().email("Email invalide"),
   password: z.string()
     .min(8, "Le mot de passe doit contenir au moins 8 caractères")
     .regex(/[A-Z]/, "Le mot de passe doit contenir au moins une majuscule")
+    .regex(/[a-z]/, "Le mot de passe doit contenir au moins une minuscule")
     .regex(/[0-9]/, "Le mot de passe doit contenir au moins un chiffre"),
-  acceptTerms: z.boolean().refine(val => val === true, {
-    message: "Vous devez accepter les CGU"
-  }),
+  confirmPassword: z.string().min(1, "Confirmez votre mot de passe"),
 });
 
-// Complete registration schema (all steps combined)
+// Step 4 with password matching validation
+export const step4Schema = step4BaseSchema.refine(
+  (data) => data.password === data.confirmPassword,
+  {
+    message: "Les mots de passe ne correspondent pas",
+    path: ["confirmPassword"],
+  }
+);
+
+// Nested registration schema (matches WizardState structure)
+export const nestedRegistrationSchema = z.object({
+  step1: step1Schema.partial(),
+  step2: step2Schema.partial(),
+  step3: step3Schema.partial(),
+  step4: step4BaseSchema.partial(),
+});
+
+// Complete flat registration schema (for final validation)
 export const fullRegistrationSchema = step1Schema
   .merge(step2Schema)
   .merge(step3Schema)
@@ -52,6 +68,7 @@ export type Step1Data = z.infer<typeof step1Schema>;
 export type Step2Data = z.infer<typeof step2Schema>;
 export type Step3Data = z.infer<typeof step3Schema>;
 export type Step4Data = z.infer<typeof step4Schema>;
+export type NestedRegistrationData = z.infer<typeof nestedRegistrationSchema>;
 export type FullRegistrationData = z.infer<typeof fullRegistrationSchema>;
 
 // Wizard State
@@ -73,7 +90,7 @@ export type WizardAction =
   | { type: 'UPDATE_STEP_3'; data: Partial<Step3Data> }
   | { type: 'UPDATE_STEP_4'; data: Partial<Step4Data> }
   | { type: 'MARK_SIREN_VALIDATED' }
-  | { type: 'MARK_ADDRESS_VALIDATED' }
+  | { type: 'SET_ADDRESS_VALIDATED'; validated: boolean }
   | { type: 'RESET' };
 
 export const initialWizardState: WizardState = {

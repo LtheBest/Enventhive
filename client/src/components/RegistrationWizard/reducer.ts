@@ -38,10 +38,10 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
         sirenValidated: true,
       };
     
-    case 'MARK_ADDRESS_VALIDATED':
+    case 'SET_ADDRESS_VALIDATED':
       return {
         ...state,
-        addressValidated: true,
+        addressValidated: action.validated,
       };
     
     case 'RESET':

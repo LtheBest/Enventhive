@@ -5,6 +5,7 @@ import registrationRoutes from "./routes/registration";
 import stripeRoutes from "./routes/stripe";
 import invoiceRoutes from "./routes/invoices";
 import eventRoutes from "./routes/events";
+import plansRoutes from "./routes/plans";
 import { apiLimiter } from "./auth/rateLimiter";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -25,6 +26,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Event management routes
   app.use('/api/events', eventRoutes);
+
+  // Plans routes (public access to view plans)
+  app.use('/api/plans', plansRoutes);
 
   // TODO: Add other routes here
   // app.use('/api/companies', companyRoutes);
