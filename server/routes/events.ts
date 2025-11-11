@@ -5,6 +5,7 @@ import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { requireAuth } from '../auth/middleware';
 import { createInsertSchema } from 'drizzle-zod';
 import { z } from 'zod';
+import { generateEventQRCode } from '../services/qrcode';
 
 const router = Router();
 
@@ -51,7 +52,26 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       .values(eventData)
       .returning();
 
-    res.status(201).json({ event });
+    // Generate QR code for the event
+    try {
+      const qrCode = await generateEventQRCode(event.id);
+      
+      // Update event with QR code
+      const [updatedEvent] = await db
+        .update(events)
+        .set({ qrCode })
+        .where(eq(events.id, event.id))
+        .returning();
+      
+      res.status(201).json({ event: updatedEvent });
+    } catch (qrError) {
+      console.error('Error generating QR code:', qrError);
+      // Return event even if QR code generation fails
+      res.status(201).json({ 
+        event,
+        warning: 'Événement créé mais QR code non généré' 
+      });
+    }
   } catch (error: any) {
     console.error('Error creating event:', error);
     
@@ -263,6 +283,58 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error deleting event:', error);
     res.status(500).json({ error: 'Erreur serveur lors de la suppression de l\'événement' });
+  }
+});
+
+/**
+ * POST /api/events/:id/qrcode
+ * Regenerate QR code for an event
+ */
+router.post('/:id/qrcode', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = req.user!;
+
+    if (!user.companyId) {
+      return res.status(403).json({ error: 'Utilisateur non associé à une entreprise' });
+    }
+
+    // Check if event exists and belongs to user's company
+    const [existingEvent] = await db
+      .select()
+      .from(events)
+      .where(
+        and(
+          eq(events.id, id),
+          eq(events.companyId, user.companyId)
+        )
+      )
+      .limit(1);
+
+    if (!existingEvent) {
+      return res.status(404).json({ error: 'Événement introuvable' });
+    }
+
+    // Generate new QR code
+    const qrCode = await generateEventQRCode(id);
+
+    // Update event with new QR code
+    const [updatedEvent] = await db
+      .update(events)
+      .set({ 
+        qrCode,
+        updatedAt: new Date(),
+      })
+      .where(eq(events.id, id))
+      .returning();
+
+    res.json({ 
+      event: updatedEvent,
+      message: 'QR code régénéré avec succès' 
+    });
+  } catch (error: any) {
+    console.error('Error regenerating QR code:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de la génération du QR code' });
   }
 });
 
