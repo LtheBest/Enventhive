@@ -1,3 +1,4 @@
+import { Link, useLocation } from "wouter";
 import {
   Sidebar,
   SidebarContent,
@@ -25,6 +26,7 @@ import { PlanBadge } from "./PlanBadge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface AppSidebarProps {
   userRole?: "company" | "admin";
@@ -39,8 +41,11 @@ export function AppSidebar({
   companyName = "Mon Entreprise",
   userName = "Jean Dupont"
 }: AppSidebarProps) {
+  const [location] = useLocation();
+  const { logout } = useAuth();
+
   const companyMenuItems = [
-    { title: "Tableau de bord", icon: LayoutDashboard, url: "/" },
+    { title: "Tableau de bord", icon: LayoutDashboard, url: "/dashboard" },
     { title: "Événements", icon: Calendar, url: "/events" },
     { title: "Participants", icon: Users, url: "/participants" },
     { title: "Véhicules", icon: Car, url: "/vehicles" },
@@ -82,21 +87,14 @@ export function AppSidebar({
             <SidebarMenu>
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <a 
-                      href={item.url}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        console.log('Navigate to', item.url);
-                      }}
-                      data-testid={`link-sidebar-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
-                    >
+                  <SidebarMenuButton asChild isActive={location === item.url}>
+                    <Link href={item.url} data-testid={`link-sidebar-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                       {shouldShowProLabel(item) && (
                         <Badge variant="secondary" className="ml-auto text-xs">Pro</Badge>
                       )}
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -109,34 +107,26 @@ export function AppSidebar({
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a 
-                    href="/settings"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      console.log('Navigate to /settings');
-                    }}
+                <SidebarMenuButton 
+                  asChild 
+                  isActive={location === (userRole === "admin" ? "/admin/settings" : "/settings")}
+                >
+                  <Link 
+                    href={userRole === "admin" ? "/admin/settings" : "/settings"} 
                     data-testid="link-sidebar-settings"
                   >
                     <Settings className="h-4 w-4" />
                     <span>Paramètres</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               {userRole === "company" && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <a 
-                      href="/subscription"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        console.log('Navigate to /subscription');
-                      }}
-                      data-testid="link-sidebar-subscription"
-                    >
+                  <SidebarMenuButton asChild isActive={location === "/billing"}>
+                    <Link href="/billing" data-testid="link-sidebar-billing">
                       <CreditCard className="h-4 w-4" />
                       <span>Abonnement</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
@@ -159,7 +149,7 @@ export function AppSidebar({
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => console.log('Logout')}
+            onClick={() => logout()}
             data-testid="button-logout"
           >
             <LogOut className="h-4 w-4" />

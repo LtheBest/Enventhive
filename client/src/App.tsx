@@ -13,8 +13,16 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Home from "@/pages/Home";
 import CompanyDashboard from "@/pages/CompanyDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
+import AdminCompanies from "@/pages/AdminCompanies";
+import AdminValidations from "@/pages/AdminValidations";
+import AdminStats from "@/pages/AdminStats";
+import AdminSettings from "@/pages/AdminSettings";
 import Events from "@/pages/Events";
 import Participants from "@/pages/Participants";
+import Vehicles from "@/pages/Vehicles";
+import Stats from "@/pages/Stats";
+import Settings from "@/pages/Settings";
+import Billing from "@/pages/Billing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import AdminLogin from "@/pages/AdminLogin";
@@ -85,12 +93,68 @@ function Router() {
           </DashboardLayout>
         </ProtectedRoute>
       </Route>
+      <Route path="/vehicles">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <Vehicles />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/stats">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <Stats />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/settings">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <Settings />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/billing">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <Billing />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
       
       {/* Admin routes */}
       <Route path="/admin">
         <ProtectedRoute requiredRole="admin">
           <DashboardLayout>
             <AdminDashboard />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/companies">
+        <ProtectedRoute requiredRole="admin">
+          <DashboardLayout>
+            <AdminCompanies />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/validations">
+        <ProtectedRoute requiredRole="admin">
+          <DashboardLayout>
+            <AdminValidations />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/stats">
+        <ProtectedRoute requiredRole="admin">
+          <DashboardLayout>
+            <AdminStats />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/settings">
+        <ProtectedRoute requiredRole="admin">
+          <DashboardLayout>
+            <AdminSettings />
           </DashboardLayout>
         </ProtectedRoute>
       </Route>

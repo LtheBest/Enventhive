@@ -7,6 +7,9 @@ interface User {
   email: string;
   role: string;
   companyId: string | null;
+  firstName: string;
+  lastName: string;
+  photoUrl: string | null;
 }
 
 interface Company {
@@ -119,8 +122,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const data = await response.json();
       localStorage.setItem('access_token', data.accessToken);
-      await loadUserData();
-      setLocation('/');
+      
+      // Load user data first to get role
+      const userData = await fetch('/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${data.accessToken}`,
+        },
+      });
+      
+      if (userData.ok) {
+        const { user: userInfo, company: companyInfo, plan: planInfo } = await userData.json();
+        setUser(userInfo);
+        setCompany(companyInfo);
+        setPlan(planInfo);
+        
+        // Redirect based on role
+        if (userInfo.role === 'admin') {
+          setLocation('/admin');
+        } else {
+          setLocation('/dashboard');
+        }
+      } else {
+        throw new Error('Failed to load user data');
+      }
     } catch (error: any) {
       console.error('Login failed:', error);
       throw error;
@@ -128,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    const currentRole = user?.role;
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
@@ -141,7 +166,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCompany(null);
       setPlan(null);
       queryClient.clear();
-      setLocation('/login');
+      
+      // Redirect to appropriate login page based on previous role
+      if (currentRole === 'admin') {
+        setLocation('/admin/login');
+      } else {
+        setLocation('/login');
+      }
     }
   };
 

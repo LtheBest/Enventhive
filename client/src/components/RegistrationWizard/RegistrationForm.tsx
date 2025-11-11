@@ -144,21 +144,33 @@ export function RegistrationForm() {
       }
 
       const data = await response.json();
+      console.log('[RegistrationForm] API response:', {
+        success: data.success,
+        requiresQuote: data.requiresQuote,
+        requiresPayment: data.requiresPayment,
+        hasAccessToken: !!data.accessToken,
+        redirectTo: data.redirectTo,
+      });
 
       // Authenticate using the token (loads user data without redirect)
       if (data.accessToken) {
+        console.log('[RegistrationForm] Authenticating with token...');
         await authenticateWithToken(data.accessToken);
+        console.log('[RegistrationForm] Authentication successful');
       }
 
       // Handle redirect based on plan tier
       if (data.requiresPayment && data.stripeCheckoutUrl) {
         // ESSENTIEL plan: Redirect to Stripe checkout
+        console.log('[RegistrationForm] Redirecting to Stripe:', data.stripeCheckoutUrl);
         window.location.href = data.stripeCheckoutUrl;
       } else if (data.requiresQuote) {
         // PRO/PREMIUM: Redirect to dashboard with quote pending
+        console.log('[RegistrationForm] Redirecting to dashboard (quote pending)');
         setLocation('/dashboard');
       } else {
         // DECOUVERTE: Redirect to dashboard
+        console.log('[RegistrationForm] Redirecting to dashboard (free plan)');
         setLocation('/dashboard');
       }
     } catch (error: any) {

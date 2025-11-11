@@ -357,25 +357,18 @@ async function handleQuoteRequiredRegistration(
         isActive: true,
       }).returning();
 
-      // Get DECOUVERTE plan for temporary access
-      const [freePlan] = await tx
-        .select()
-        .from(plans)
-        .where(eq(plans.tier, 'DECOUVERTE'))
-        .limit(1);
-
-      // Create plan state with quote pending
+      // Create plan state with requested plan (PRO/PREMIUM) pending quote approval
       await tx.insert(companyPlanState).values({
         companyId: company.id,
-        planId: freePlan!.id, // Temporarily on free plan
-        quotePending: true,
+        planId: plan.id, // Use requested plan (PRO or PREMIUM), not free plan
+        quotePending: true, // Mark as pending quote approval
       });
 
       // Log plan history
       await tx.insert(planHistory).values({
         companyId: company.id,
         oldPlanId: null,
-        newPlanId: freePlan!.id,
+        newPlanId: plan.id, // Requested plan (PRO or PREMIUM)
         reason: `Quote requested for ${plan.name}`,
         changedByUserId: user.id,
       });
