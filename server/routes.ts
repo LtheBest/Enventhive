@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import authRoutes from "./routes/auth";
 import registrationRoutes from "./routes/registration";
+import registrationVerifyRoutes from "./routes/registration-verify";
 import stripeRoutes from "./routes/stripe";
 import invoiceRoutes from "./routes/invoices";
 import eventRoutes from "./routes/events";
@@ -19,6 +20,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Registration routes
   app.use('/api/registration', registrationRoutes);
+  app.use('/api/registration', registrationVerifyRoutes);
 
   // Stripe payment routes
   app.use('/api/stripe', stripeRoutes);

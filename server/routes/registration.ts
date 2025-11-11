@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { withTransaction } from '../utils/transaction';
 import { validateSirenWithApi } from '../services/siren';
 import { searchFrenchAddresses, validateFrenchAddress } from '../services/address';
+import { createStripeCheckoutSession } from './stripe';
 
 const router = Router();
 
@@ -256,33 +257,52 @@ async function handlePaidRegistration(
       return { company, user };
     });
 
-    // Calculate amount based on billing cycle
-    const amount = data.billingCycle === 'annual' 
-      ? plan.annualPrice 
-      : plan.monthlyPrice;
+    // Create Stripe Checkout Session for payment
+    const stripeSession = await createStripeCheckoutSession({
+      company: {
+        id: result.company.id,
+        email: result.company.email,
+        name: result.company.name,
+      },
+      plan: {
+        id: plan.id,
+        name: plan.name,
+        monthlyPrice: plan.monthlyPrice,
+        annualPrice: plan.annualPrice,
+      },
+      billingCycle: data.billingCycle || 'monthly',
+      userId: result.user.id,
+      isRegistration: true,
+    });
 
-    // Return payment information
-    // The frontend will handle Stripe checkout
+    // Generate JWT token for auto-login before redirecting to Stripe
+    const accessToken = generateAccessToken({
+      userId: result.user.id,
+      email: result.user.email,
+      role: result.user.role,
+      companyId: result.company.id,
+    });
+
+    // Return success with Stripe checkout URL and auth token
     return res.status(201).json({
       success: true,
-      message: 'Compte créé, paiement requis',
+      message: 'Compte créé, redirection vers le paiement',
       requiresPayment: true,
+      stripeCheckoutUrl: stripeSession.url,
+      stripeSessionId: stripeSession.id,
+      accessToken,
       user: {
         id: result.user.id,
         email: result.user.email,
+        role: result.user.role,
+        companyId: result.company.id,
+        firstName: result.user.firstName,
+        lastName: result.user.lastName,
       },
       company: {
         id: result.company.id,
         name: result.company.name,
       },
-      payment: {
-        planId: plan.id,
-        planName: plan.name,
-        amount: amount.toString(),
-        currency: 'EUR',
-        billingCycle: data.billingCycle || 'monthly',
-      },
-      redirectTo: '/payment',
     });
   } catch (error) {
     console.error('Paid registration error:', error);

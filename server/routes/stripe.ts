@@ -19,6 +19,57 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
 /**
+ * Shared helper to create Stripe Checkout Session
+ * Can be used both for registration and plan upgrades
+ */
+export async function createStripeCheckoutSession(params: {
+  company: { id: string; email: string; name: string };
+  plan: { id: string; name: string; monthlyPrice: string; annualPrice: string };
+  billingCycle: 'monthly' | 'annual';
+  userId: string;
+  isRegistration?: boolean;
+}) {
+  const { company, plan, billingCycle, userId, isRegistration = false } = params;
+
+  const amount = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+  const unitAmount = Math.round(parseFloat(amount) * 100); // Convert to cents
+
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ['card'],
+    line_items: [
+      {
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: `TEAMMOVE - ${plan.name}`,
+            description: `Abonnement ${billingCycle === 'annual' ? 'annuel' : 'mensuel'}`,
+          },
+          unit_amount: unitAmount,
+          recurring: {
+            interval: billingCycle === 'annual' ? 'year' : 'month',
+          },
+        },
+        quantity: 1,
+      },
+    ],
+    mode: 'subscription',
+    success_url: `${process.env.VITE_APP_URL || 'http://localhost:5000'}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:5000'}/payment/cancel`,
+    customer_email: company.email,
+    client_reference_id: company.id,
+    metadata: {
+      companyId: company.id,
+      planId: plan.id,
+      billingCycle,
+      userId,
+      registrationFlow: isRegistration ? 'initial' : 'upgrade',
+    },
+  });
+
+  return session;
+}
+
+/**
  * Create Stripe Checkout Session for ESSENTIEL plan payment
  */
 router.post('/create-checkout-session', requireAuth, async (req: Request, res: Response) => {
@@ -52,40 +103,22 @@ router.post('/create-checkout-session', requireAuth, async (req: Request, res: R
       return res.status(404).json({ error: 'Plan non trouvé' });
     }
 
-    // Calculate amount
-    const amount = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
-    const unitAmount = Math.round(parseFloat(amount) * 100); // Convert to cents
-
-    // Create Stripe Checkout Session
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'eur',
-            product_data: {
-              name: `TEAMMOVE - ${plan.name}`,
-              description: `Abonnement ${billingCycle === 'annual' ? 'annuel' : 'mensuel'}`,
-            },
-            unit_amount: unitAmount,
-            recurring: {
-              interval: billingCycle === 'annual' ? 'year' : 'month',
-            },
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'subscription',
-      success_url: `${process.env.VITE_APP_URL || 'http://localhost:5000'}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.VITE_APP_URL || 'http://localhost:5000'}/payment/cancel`,
-      customer_email: company.email,
-      client_reference_id: company.id,
-      metadata: {
-        companyId: company.id,
-        planId: plan.id,
-        billingCycle,
-        userId: user.userId,
+    // Create Stripe Checkout Session using shared helper
+    const session = await createStripeCheckoutSession({
+      company: {
+        id: company.id,
+        email: company.email,
+        name: company.name,
       },
+      plan: {
+        id: plan.id,
+        name: plan.name,
+        monthlyPrice: plan.monthlyPrice,
+        annualPrice: plan.annualPrice,
+      },
+      billingCycle: billingCycle as 'monthly' | 'annual',
+      userId: user.userId,
+      isRegistration: false,
     });
 
     return res.json({

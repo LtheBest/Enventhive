@@ -79,12 +79,21 @@ router.get('/stats', requireAuth, requireCompany, async (req, res) => {
       .where(sql`${companyPlanState.companyId} = ${companyId}`)
       .limit(1);
 
+    // Determine status based on quotePending flag
+    const planStatus = planState?.quotePending ? 'quote_pending' : 'active';
+
     res.json({
       totalEvents: companyEvents.length,
       upcomingEvents: upcomingEvents.length,
       totalParticipants,
       activeVehicles,
-      plan: planState || {
+      plan: planState ? {
+        tier: planState.tier,
+        status: planStatus,
+        quotePending: planState.quotePending,
+        maxEvents: 5,
+        maxParticipantsPerEvent: 50,
+      } : {
         tier: 'DECOUVERTE',
         quotePending: false,
         maxEvents: 5,
