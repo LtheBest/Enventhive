@@ -1,5 +1,5 @@
 import { useReducer, useEffect, useState } from 'react';
-import { useLocation } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,48 +13,30 @@ import { ProgressStepper } from './ProgressStepper';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function RegistrationForm() {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
+  const search = useSearch();  // Get query string from wouter
   const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { login } = useAuth();
 
-  // Parse step from URL params
-  const searchParams = new URLSearchParams(location.split('?')[1] || '');
+  // Parse step from URL query params (using wouter's useSearch)
+  const searchParams = new URLSearchParams(search);
   const urlStep = parseInt(searchParams.get('step') || '1', 10);
+  
+  console.log('[RegistrationForm] RENDER - search:', search, 'urlStep:', urlStep, 'state.currentStep:', state.currentStep);
 
-  // Sync reducer with URL step (with validation + gating)
+  // Simple sync: currentStep follows urlStep
   useEffect(() => {
     const validStep = Math.max(1, Math.min(4, urlStep));
     
-    // Gate: enforce prerequisites before allowing step navigation
-    let allowedStep = validStep;
+    console.log('[RegistrationForm] Syncing step - urlStep:', urlStep, 'validStep:', validStep, 'currentStep:', state.currentStep);
     
-    // Step 2 requires SIREN validation from Step 1
-    if (validStep >= 2 && !state.sirenValidated) {
-      allowedStep = 1;
+    if (validStep !== state.currentStep) {
+      console.log('[RegistrationForm] Updating currentStep to', validStep);
+      dispatch({ type: 'SET_STEP', step: validStep });
     }
-    
-    // Step 3 requires address validation from Step 2
-    if (validStep >= 3 && !state.addressValidated) {
-      allowedStep = Math.max(1, state.sirenValidated ? 2 : 1);
-    }
-    
-    // Step 4 requires plan selection from Step 3
-    if (validStep >= 4 && !state.step3.planTier) {
-      allowedStep = Math.max(1, state.addressValidated ? 3 : state.sirenValidated ? 2 : 1);
-    }
-    
-    // Update reducer if gated step differs from URL
-    if (allowedStep !== state.currentStep) {
-      dispatch({ type: 'SET_STEP', step: allowedStep });
-    }
-    
-    // Update URL if we gated the user back
-    if (allowedStep !== validStep) {
-      setLocation(`/register?step=${allowedStep}`, { replace: true });
-    }
-  }, [urlStep, state.sirenValidated, state.addressValidated, state.step3.planTier]);
+  }, [urlStep]);
 
   // Initialize form with all default values
   const methods = useForm<NestedRegistrationData>({
@@ -78,6 +60,7 @@ export function RegistrationForm() {
   };
 
   const handleMarkSirenValidated = () => {
+    console.log('[RegistrationForm] MARK_SIREN_VALIDATED called');
     dispatch({ type: 'MARK_SIREN_VALIDATED' });
   };
 
