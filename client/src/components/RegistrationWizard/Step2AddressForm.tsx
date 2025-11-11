@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFormContext, Controller } from "react-hook-form";
 import { useLocation } from "wouter";
 import { Loader2, MapPin, Check } from "lucide-react";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { NestedRegistrationData } from "./types";
+import type { NestedRegistrationData, Step2Data } from "./types";
 
 interface AddressSuggestion {
   label: string;
@@ -20,41 +20,35 @@ interface AddressSuggestion {
 }
 
 interface Step2Props {
-  onNext: (data: Partial<Step2Data>) => void;
+  onNext: (data: Step2Data) => void;
   onBack: () => void;
   onAddressValidated: (validated: boolean) => void;
   addressValidated: boolean;
-  defaultValues?: Partial<Step2Data>;
 }
 
-interface Step2Data {
-  street: string;
-  city: string;
-  postalCode: string;
-  latitude?: number;
-  longitude?: number;
-}
-
-export function Step2AddressForm({ onNext, onBack, onAddressValidated, addressValidated, defaultValues }: Step2Props) {
-  const { control, setValue, watch, getValues } = useFormContext<NestedRegistrationData>();
+export function Step2AddressForm({ onNext, onBack, onAddressValidated, addressValidated }: Step2Props) {
+  const { control, setValue, watch, trigger } = useFormContext<NestedRegistrationData>();
   const [, setLocation] = useLocation();
   
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   
-  // Initialize from wizard state if address was previously validated
-  const [lastValidatedAddress, setLastValidatedAddress] = useState(() => {
-    if (addressValidated && defaultValues) {
-      return `${defaultValues.street}, ${defaultValues.city} ${defaultValues.postalCode}`;
-    }
-    return "";
-  });
+  // Initialize from form data when address was previously validated
+  const [lastValidatedAddress, setLastValidatedAddress] = useState("");
   const [isAddressSelected, setIsAddressSelected] = useState(addressValidated);
 
   const street = watch("step2.street");
   const city = watch("step2.city");
   const postalCode = watch("step2.postalCode");
+
+  // Initialize lastValidatedAddress from form data when addressValidated prop is true
+  useEffect(() => {
+    if (addressValidated && street && city && postalCode && !lastValidatedAddress) {
+      setLastValidatedAddress(`${street}, ${city} ${postalCode}`);
+      setIsAddressSelected(true);
+    }
+  }, [addressValidated, street, city, postalCode, lastValidatedAddress]);
 
   // Fetch address suggestions
   const fetchSuggestions = async (query: string) => {
@@ -100,14 +94,24 @@ export function Step2AddressForm({ onNext, onBack, onAddressValidated, addressVa
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    // First check address selection (UX requirement)
     if (!isAddressSelected) {
       alert("Veuillez sélectionner une adresse depuis les suggestions");
       return;
     }
-    // Extract Step2 data from form
-    const formData = getValues();
-    onNext(formData.step2 || {});
+    
+    // Trigger validation for step2 fields
+    const isValid = await trigger([
+      'step2.street',
+      'step2.city',
+      'step2.postalCode'
+    ]);
+    if (!isValid) return;
+    
+    // Get data from parent form
+    const formData = watch();
+    onNext(formData.step2 as Step2Data);
   };
 
   return (

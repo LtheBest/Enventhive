@@ -26,7 +26,7 @@ interface Step3Props {
 }
 
 export function Step3PlanSelection({ onNext, onBack, onPlanSelected }: Step3Props) {
-  const { control, watch, setValue } = useFormContext<NestedRegistrationData>();
+  const { control, watch, setValue, trigger } = useFormContext<NestedRegistrationData>();
   const selectedPlanId = watch("step3.planId");
 
   // Fetch available plans
@@ -34,11 +34,20 @@ export function Step3PlanSelection({ onNext, onBack, onPlanSelected }: Step3Prop
     queryKey: ['/api/plans'],
   });
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    // Check plan selection (UX requirement)
     if (!selectedPlanId) {
       alert("Veuillez sélectionner un plan");
       return;
     }
+
+    // Trigger validation for step3 fields
+    const isValid = await trigger([
+      'step3.planId',
+      'step3.planTier'
+    ]);
+    if (!isValid) return;
+
     onNext();
   };
 

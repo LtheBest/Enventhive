@@ -87,22 +87,19 @@ export function RegistrationForm() {
     setSubmitError(null);
 
     try {
+      // Validate entire form before submitting
+      const isValid = await methods.trigger();
+      if (!isValid) {
+        setSubmitError('Veuillez corriger les erreurs dans le formulaire');
+        setIsSubmitting(false);
+        return;
+      }
+      
       // Get form data
       const formData = methods.getValues();
       
       console.log('[DEBUG] Wizard state:', state);
       console.log('[DEBUG] Form data:', formData);
-      
-      // Manually validate Step4 with full schema (including password match)
-      const { step4Schema } = await import('./types');
-      const step4Result = step4Schema.safeParse(formData.step4);
-      
-      if (!step4Result.success) {
-        const firstError = step4Result.error.errors[0];
-        setSubmitError(`Erreur de validation : ${firstError.message}`);
-        setIsSubmitting(false);
-        return;
-      }
       
       // Build registration payload from React Hook Form (single source of truth)
       const payload = {
@@ -207,7 +204,6 @@ export function RegistrationForm() {
                   onBack={() => navigateToStep(1)}
                   onAddressValidated={handleMarkAddressValidated}
                   addressValidated={state.addressValidated}
-                  defaultValues={state.step2}
                 />
               )}
 
