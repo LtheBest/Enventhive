@@ -4,6 +4,7 @@ import { db } from '../db';
 import { companies, transactions, invoices, companyPlanState, planHistory, plans } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { requireAuth } from '../auth/middleware';
+import { generateInvoicePDF } from '../services/invoice';
 
 const router = Router();
 
@@ -225,8 +226,15 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   console.log('Company plan activated for:', companyId);
 
-  // Note: Invoice PDF generation will be handled separately
-  // via the invoice.payment_succeeded event
+  // Generate and store invoice PDF
+  try {
+    const pdfUrl = await generateInvoicePDF(transaction.id);
+    console.log('Invoice PDF generated:', pdfUrl);
+  } catch (error: any) {
+    console.error('Failed to generate invoice PDF:', error);
+    // Don't fail the whole transaction if PDF generation fails
+    // The invoice can be regenerated later
+  }
 }
 
 /**
@@ -309,8 +317,15 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
       .where(eq(companyPlanState.companyId, existingTransaction.companyId));
   }
 
-  // TODO: Generate and store PDF invoice
-  // This will be implemented in the next task
+  // Generate and store invoice PDF for renewal
+  try {
+    const pdfUrl = await generateInvoicePDF(transaction.id);
+    console.log('Renewal invoice PDF generated:', pdfUrl);
+  } catch (error: any) {
+    console.error('Failed to generate renewal invoice PDF:', error);
+    // Don't fail the whole transaction if PDF generation fails
+    // The invoice can be regenerated later
+  }
 }
 
 /**
