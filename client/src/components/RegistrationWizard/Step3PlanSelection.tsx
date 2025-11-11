@@ -22,7 +22,7 @@ const PLAN_ICONS = {
 interface Step3Props {
   onNext: () => void;
   onBack: () => void;
-  onPlanSelected: (planId: number, tier: string) => void;
+  onPlanSelected: (planId: string, tier: string) => void;
 }
 
 export function Step3PlanSelection({ onNext, onBack, onPlanSelected }: Step3Props) {
@@ -33,16 +33,6 @@ export function Step3PlanSelection({ onNext, onBack, onPlanSelected }: Step3Prop
   const { data: plans, isLoading } = useQuery<Plan[]>({
     queryKey: ['/api/plans'],
   });
-
-  const handlePlanSelect = (planIdStr: string) => {
-    const planId = parseInt(planIdStr);
-    const plan = plans?.find(p => p.id === planId);
-    if (plan) {
-      setValue("step3.planId", planId);
-      setValue("step3.planTier", plan.tier);
-      onPlanSelected(planId, plan.tier);
-    }
-  };
 
   const handleNext = () => {
     if (!selectedPlanId) {
@@ -77,8 +67,15 @@ export function Step3PlanSelection({ onNext, onBack, onPlanSelected }: Step3Prop
           control={control}
           render={({ field }) => (
             <RadioGroup
-              value={field.value?.toString() || ""}
-              onValueChange={(value) => handlePlanSelect(value)}
+              value={field.value || ""}
+              onValueChange={(value) => {
+                const plan = plans?.find(p => p.id === value);
+                if (plan) {
+                  field.onChange(value); // planId is UUID string
+                  setValue("step3.planTier", plan.tier);
+                  onPlanSelected(value, plan.tier);
+                }
+              }}
               className="grid gap-4"
             >
               {plans?.map((plan) => {

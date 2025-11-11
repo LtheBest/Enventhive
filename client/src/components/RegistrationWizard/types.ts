@@ -24,7 +24,7 @@ export const step2Schema = z.object({
 
 // Step 3: Plan Selection
 export const step3Schema = z.object({
-  planId: z.number().min(1, "Veuillez sélectionner un plan"),
+  planId: z.string().uuid("Veuillez sélectionner un plan valide"),
   planTier: z.string().min(1, "Le plan est requis"),
 });
 
@@ -62,7 +62,14 @@ export const nestedRegistrationSchema = z.object({
 export const fullRegistrationSchema = step1Schema
   .merge(step2Schema)
   .merge(step3Schema)
-  .merge(step4Schema);
+  .merge(step4BaseSchema)
+  .refine(
+    (data) => data.password === data.confirmPassword,
+    {
+      message: "Les mots de passe ne correspondent pas",
+      path: ["confirmPassword"],
+    }
+  );
 
 export type Step1Data = z.infer<typeof step1Schema>;
 export type Step2Data = z.infer<typeof step2Schema>;

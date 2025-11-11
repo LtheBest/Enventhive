@@ -1,14 +1,13 @@
 import { db } from '../db';
-import { neon } from '@neondatabase/serverless';
 
-// Helper to run database operations in a transaction
+// Helper to run database operations
+// NOTE: neon-http driver does not support real transactions
+// Operations are executed sequentially without atomicity guarantees
 export async function withTransaction<T>(
   callback: (tx: typeof db) => Promise<T>
 ): Promise<T> {
-  const sql = neon(process.env.DATABASE_URL!);
+  console.warn('[withTransaction] Running without transaction support (neon-http driver limitation)');
   
-  // Use Drizzle's transaction method
-  return await db.transaction(async (tx) => {
-    return await callback(tx as any);
-  });
+  // Execute callback with db instance (no real transaction)
+  return await callback(db);
 }

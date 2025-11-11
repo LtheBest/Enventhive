@@ -78,7 +78,7 @@ export function RegistrationForm() {
     navigateToStep(4);
   };
 
-  const handlePlanSelected = (planId: number, tier: string) => {
+  const handlePlanSelected = (planId: string, tier: string) => {
     dispatch({ type: 'UPDATE_STEP_3', data: { planId, planTier: tier } });
   };
 
@@ -89,6 +89,9 @@ export function RegistrationForm() {
     try {
       // Get form data
       const formData = methods.getValues();
+      
+      console.log('[DEBUG] Wizard state:', state);
+      console.log('[DEBUG] Form data:', formData);
       
       // Manually validate Step4 with full schema (including password match)
       const { step4Schema } = await import('./types');
@@ -101,28 +104,30 @@ export function RegistrationForm() {
         return;
       }
       
-      // Build registration payload
+      // Build registration payload from React Hook Form (single source of truth)
       const payload = {
-        // Step 1: Company info
-        companyName: formData.step1.companyName,
-        siren: formData.step1.siren,
-        employeeCount: formData.step1.employeeCount,
+        // Step 1: Company info (from RHF)
+        companyName: formData.step1?.companyName,
+        siren: formData.step1?.siren,
+        companyEmail: formData.step1?.companyEmail,
+        phone: formData.step1?.phone,
+        organizationType: formData.step1?.organizationType,
         
-        // Step 2: Address
-        street: formData.step2.street,
-        city: formData.step2.city,
-        postalCode: formData.step2.postalCode,
-        latitude: formData.step2.latitude,
-        longitude: formData.step2.longitude,
+        // Step 2: Address (from RHF)
+        street: formData.step2?.street,
+        city: formData.step2?.city,
+        postalCode: formData.step2?.postalCode,
+        latitude: formData.step2?.latitude,
+        longitude: formData.step2?.longitude,
         
-        // Step 3: Plan
-        planId: formData.step3.planId,
+        // Step 3: Plan (from RHF)
+        planId: formData.step3?.planId,
         
-        // Step 4: User account
-        firstName: formData.step4.firstName,
-        lastName: formData.step4.lastName,
-        email: formData.step4.email,
-        password: formData.step4.password,
+        // Step 4: User account (from RHF)
+        firstName: formData.step4?.firstName,
+        lastName: formData.step4?.lastName,
+        email: formData.step4?.email,
+        password: formData.step4?.password,
       };
 
       // Call registration API
@@ -138,6 +143,11 @@ export function RegistrationForm() {
       }
 
       const data = await response.json();
+
+      // Ensure credentials are present before login
+      if (!formData.step4.email || !formData.step4.password) {
+        throw new Error('Identifiants manquants après l\'enregistrement');
+      }
 
       // Handle based on plan tier
       if (data.requiresPayment && data.stripeCheckoutUrl) {
