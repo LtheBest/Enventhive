@@ -1,0 +1,80 @@
+Prompt IA Complet TEAMMOVE – Gestion d’évènements entreprises
+Objectif : Créer une application fullstack professionnelle, ultra-responsive, permettant à toute entreprise de s’inscrire, de gérer ses évènements et ses participants, offrant des dashboards modulaires intégrant TOUTES les fonctionnalités communes ET celles spécifiques aux plans d’abonnement. L’application doit être sécurisée, bien architecturée et générer des factures automatiquement pour chaque transaction payante.
+
+1. Fonctionnalités communes : à TOUS les dashboards – Entreprises et Admin
+* Vue d’ensemble dynamique : Totaux mis à jour en temps réel (évènements, conducteurs, passagers, véhicules disponibles, places restantes, etc.)
+* Gestion des évènements : Création (ponctuel/récurrent), édition, suppression, partage rapide de lien public + QR code, accès à détails, programmation de rappels automatiques par email ou notification.
+* Gestion participants : Invitation par email (avec bouton rejoindre), ajout/suppression manuelle, suivi des inscriptions, matching intelligent par ville/zone pour conducteurs et passagers, algorithme automatisé pour notifications et relances si pas de conducteurs.
+* Profil entreprise : Modification profil, upload logo (visibilité dashboard uniquement), photo de profil, coordonnées modifiables.
+* Gestion véhicules : Ajout d’un ou plusieurs véhicules par évènement (places, départ, destination), consultable/modifiable.
+* Upgrade/downgrade abonnement : Bouton pour changement immédiat ou planifié de plan, migration automatique des droits / fonctionnalités.
+* Interface utilisateur : Design responsive, UX moderne, cookies banner, mode dark/light, autocomplétion des adresses (France), sécurisation des données personnelles (respect RGPD).
+* Tests & Documentation : Backend (Jest/Supertest), Frontend (React Testing Library, Cypress), README clair, documentation API auto-générée (Swagger/OpenAPI), scripts de migration et seed, code bien commenté.
+* Sécurité & Accès : Authentification forte (JWT + refresh tokens), captcha, gestion “se souvenir de moi”, limitations brute-force sur login.
+
+2. Fonctionnalités spécifiques liées au type de plan d’abonnement
+Plan	Fonctionnalités supplémentaires
+Découverte	Gestion simple, reporting basique, limitation évènements et participants
+Essentiel	Reporting avancé, notifications, support standard, messagerie de diffusion participants
+Pro	CRM, stats avancées, possibilité de changer le logo dashboard, API, véhicules illimités
+Premium	Intégrations spécifiques, support dédié, possibilité logo dashboard, marque blanche, véhicules
+
+* Accès différencié : À l’activation d’un plan, les fonctionnalités disponibles dans le dashboard évoluent automatiquement.
+* Migration automatique lors du changement de plan :
+    * Les anciennes limitations doivent être levées, les nouvelles appliquées immédiatement.
+    * Historique des changements de plan à conserver dans le profil entreprise.  
+ Connexion entreprise ou organisme :
+* Sur la page de connexion, l’utilisateur saisit l’adresse email professionnelle et le mot de passe associé.
+* Option “se souvenir de moi” : permet la persistance de la session sur le navigateur choisi.
+* Intégration obligatoire d’un CAPTCHA (par exemple Google reCAPTCHA) :
+    * Affiché et obligatoire avant la validation du formulaire, pour garantir que seul un humain peut initier la connexion.
+    * Si le CAPTCHA n’est pas validé, blocage de toute tentative de connexion et affichage d’un message d’erreur clair.
+* Gestion complète des erreurs : mot de passe incorrect, email non enregistré, compte désactivé, affiche un message adapté à chaque cas.
+* Sécurité avancée : protection contre brute-force (throttling), limitation du nombre de tentatives, journaux d’activité login.
+ 
+3. Gestion des inscriptions : Flux détaillé
+* Inscription nouvelle entreprise :
+    * Sélection du type d’organisme (Club, PME, Grande Entreprise)
+    * Choix du plan d’abonnement
+    * Formulaire complet (nom, email, téléphone, SIREN, adresse [auto-complétion], mot de passe + confirmation, case CGU obligatoire)
+* Plans payants sans devis (Essentiel) :
+    * Après clic sur “créer un compte” → Redirection immédiate vers le paiement (Stripe, explication, choix mensuel ou annuel)
+    * Une fois paiement validé :
+        * Génération automatique d’une facture (PDF) → Email envoyé à l’entreprise
+        * Création du compte avec accès au dashboard du plan choisi (fonctionnalités communes + spécifiques)
+    * Si paiement échoué ou annulé :
+        * Création du compte automatique avec accès limité au dashboard Découverte (on notifie l’entreprise, possibilité upgrade ultérieur).
+        * Aucune facture envoyée, relance possible vers la page paiement.
+* Plans payants sur devis (Pro, Premium) :
+    * Après clic sur “créer un compte” → Redirection vers le support (formulaire de devis, explication : “Votre demande est en attente d’un devis personnalisé”)
+    * Seul l’admin, via le dashboard admin, valide l’accès et active le plan (l’entreprise reçoit une notification et accède à son dashboard complet).
+    * En cas de refus, reste en plan Découverte.
+* Plan Découverte (free) :
+    * Enregistrement instantané
+    * Accès immédiat au dashboard Découverte, possibilité d’upgrade à tout moment.
+    * Invitation à renseigner le profil et améliorer la visibilité / fonctionnalités.
+
+4. Gestion des changements de plan et paiement
+* Cas upgrade/downgrade :
+    * Toute entreprise peut demander en un clic à changer de plan via son dashboard (upgrade/downgrade)
+    * Paiement immédiat pour upgrade si vers plan payant, accès provisionné une fois la transaction validée et la facture générée.
+    * Si paiement échoué, retour/maintien sur plan d’origine : notification et relance possible.
+    * Admin peut forcer le changement de plan temporaire (ex. période d’essai d’un plan supérieur), droits automatiques et rétrogradés en fin d’essai.
+
+5. Gestion des accès Admin
+* Deux comptes admin créés par défaut (jamais inscriptibles côté site, accès code uniquement)
+* Dashboard admin sécurisée
+    * Connexion admin :
+        * Interface dédiée pour les administrateurs (URL et page spécifique).
+        * Les administrateurs s’authentifient avec leur identifiant et mot de passe, jamais possible de s’inscrire comme admin depuis l’interface publique.
+        * CAPTCHA obligatoire aussi pour le login admin. 
+    * Vue globale sur toutes entreprises, statistiques, gestion individuelle ou groupée des droits et plans, activation/désactivation fonctionnalités, export rapports et suppression de comptes, messagerie individuelle/groupe.
+    * Gestion des validations d’inscription pour plans sur devis, contrôle manuel, notification entreprise.
+
+Consignes additionnelles pour l'IA :
+* Soigner l’architecture pour une modularité optimale (API RESTful séparée, composants frontend réutilisables, code scalable).
+* Couvrir tous les cas métier et de gestion des erreurs (paiement, notifications, validations…).
+* Proposer un onboarding clair, scripts et documentation, tests à lancer facilement pour vérification de toutes fonctionnalités.
+* Proposer tout point UX/UI ou fonctionnel utile pour ne rien oublier, via commentaires ou note dédiée dans le code ou la documentation (ex : cookies, dark mode, campagnes notifications automatisées…).
+
+
