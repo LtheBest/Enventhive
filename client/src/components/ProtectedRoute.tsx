@@ -4,17 +4,28 @@ import { useAuth } from '@/contexts/AuthContext';
 
 interface ProtectedRouteProps {
   children: ReactNode;
+  requiredRole?: 'admin' | 'company';
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
     if (!isLoading && !user) {
-      setLocation('/login');
+      if (requiredRole === 'admin') {
+        setLocation('/admin/login');
+      } else {
+        setLocation('/login');
+      }
+    } else if (!isLoading && user && requiredRole && user.role !== requiredRole) {
+      if (user.role === 'admin') {
+        setLocation('/admin');
+      } else {
+        setLocation('/dashboard');
+      }
     }
-  }, [user, isLoading, setLocation]);
+  }, [user, isLoading, setLocation, requiredRole]);
 
   if (isLoading) {
     return (

@@ -10,7 +10,9 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { CookieBanner } from "@/components/CookieBanner";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import Home from "@/pages/Home";
 import Dashboard from "@/pages/Dashboard";
+import AdminDashboard from "@/pages/AdminDashboard";
 import Events from "@/pages/Events";
 import Participants from "@/pages/Participants";
 import Login from "@/pages/Login";
@@ -51,28 +53,40 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
 function Router() {
   return (
     <Switch>
+      {/* Public routes */}
+      <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/admin/login" component={AdminLogin} />
       
-      <Route path="/">
-        <ProtectedRoute>
+      {/* Company routes */}
+      <Route path="/dashboard">
+        <ProtectedRoute requiredRole="company">
           <DashboardLayout>
             <Dashboard />
           </DashboardLayout>
         </ProtectedRoute>
       </Route>
       <Route path="/events">
-        <ProtectedRoute>
+        <ProtectedRoute requiredRole="company">
           <DashboardLayout>
             <Events />
           </DashboardLayout>
         </ProtectedRoute>
       </Route>
       <Route path="/participants">
-        <ProtectedRoute>
+        <ProtectedRoute requiredRole="company">
           <DashboardLayout>
             <Participants />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      {/* Admin routes */}
+      <Route path="/admin">
+        <ProtectedRoute requiredRole="admin">
+          <DashboardLayout>
+            <AdminDashboard />
           </DashboardLayout>
         </ProtectedRoute>
       </Route>
