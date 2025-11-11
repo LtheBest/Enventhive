@@ -83,7 +83,7 @@ export default function AdminDashboard() {
   const [approvalCompanyId, setApprovalCompanyId] = useState<string>('');
   
   // Fetch available plans (for approval selection)
-  const { data: plansData } = useQuery<{plans: Plan[]}>({
+  const { data: allPlans } = useQuery<Plan[]>({
     queryKey: ['/api/plans'],
   });
 
@@ -136,7 +136,7 @@ export default function AdminDashboard() {
 
   const companies = companiesData?.companies || [];
   const transactions = transactionsData?.transactions || [];
-  const proAndPremiumPlans = (plansData?.plans || []).filter(p => p.tier === 'PRO' || p.tier === 'PREMIUM');
+  const proAndPremiumPlans = (allPlans || []).filter(p => p.tier === 'PRO' || p.tier === 'PREMIUM');
 
   if (statsLoading || companiesLoading) {
     return (
