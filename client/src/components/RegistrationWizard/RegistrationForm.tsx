@@ -195,7 +195,6 @@ export function RegistrationForm() {
             <FormProvider {...methods}>
               {state.currentStep === 1 && (
                 <Step1CompanyInfo
-                  defaultValues={state.step1}
                   onNext={handleStep1Complete}
                   sirenValidated={state.sirenValidated}
                   onMarkSirenValidated={handleMarkSirenValidated}

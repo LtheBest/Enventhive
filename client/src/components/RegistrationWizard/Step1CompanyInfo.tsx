@@ -1,6 +1,5 @@
-import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { step1Schema, Step1Data } from './types';
+import { useFormContext, Controller } from 'react-hook-form';
+import { NestedRegistrationData, Step1Data } from './types';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,14 +9,12 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface Step1Props {
-  defaultValues: Partial<Step1Data>;
   onNext: (data: Step1Data) => void;
   sirenValidated: boolean;
   onMarkSirenValidated: () => void;
 }
 
 export function Step1CompanyInfo({ 
-  defaultValues, 
   onNext,
   sirenValidated,
   onMarkSirenValidated
@@ -27,18 +24,23 @@ export function Step1CompanyInfo({
   const [sirenSuccess, setSirenSuccess] = useState(sirenValidated);
   const [lastValidatedSiren, setLastValidatedSiren] = useState('');
 
+  // Use form context from parent RegistrationForm
   const {
     register,
-    handleSubmit,
     watch,
     control,
     formState: { errors },
-  } = useForm<Step1Data>({
-    resolver: zodResolver(step1Schema),
-    defaultValues,
-  });
+    trigger,
+  } = useFormContext<NestedRegistrationData>();
 
-  const sirenValue = watch('siren');
+  const sirenValue = watch('step1.siren');
+
+  // Initialize lastValidatedSiren from form data when sirenValidated prop is true
+  useEffect(() => {
+    if (sirenValidated && sirenValue && !lastValidatedSiren) {
+      setLastValidatedSiren(sirenValue);
+    }
+  }, [sirenValidated, sirenValue, lastValidatedSiren]);
 
   // Reset SIREN validation when user changes the field
   useEffect(() => {
@@ -95,20 +97,35 @@ export function Step1CompanyInfo({
     }
   };
 
-  const onSubmit = async (data: Step1Data) => {
-    // Always validate SIREN before proceeding if not matching last validated value
-    if (data.siren !== lastValidatedSiren || !sirenSuccess) {
-      const isValid = await validateSiren(data.siren);
-      if (!isValid) {
-        return;
-      }
+  const handleNext = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // 1. Validate step1 fields using RHF trigger (must specify nested paths)
+    const isValid = await trigger([
+      'step1.organizationType',
+      'step1.companyName',
+      'step1.siren',
+      'step1.companyEmail',
+      'step1.phone'
+    ]);
+    if (!isValid) return;
+    
+    // 2. Get current form data
+    const formData = watch();
+    const step1Data = formData.step1;
+    
+    // 3. Validate SIREN if changed (ensure siren is defined)
+    if (step1Data.siren && (step1Data.siren !== lastValidatedSiren || !sirenSuccess)) {
+      const sirenValid = await validateSiren(step1Data.siren);
+      if (!sirenValid) return;
     }
     
-    onNext(data);
+    // 4. Call onNext with step1 data (all required fields validated by trigger)
+    onNext(step1Data as Step1Data);
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" data-testid="form-step1">
+    <form onSubmit={handleNext} className="space-y-6" data-testid="form-step1">
       <div>
         <h2 className="text-2xl font-semibold mb-2">Informations de l'entreprise</h2>
         <p className="text-muted-foreground">Commençons par les détails de votre organisation</p>
@@ -118,7 +135,7 @@ export function Step1CompanyInfo({
         <div className="space-y-2">
           <Label>Type d'organisation *</Label>
           <Controller
-            name="organizationType"
+            name="step1.organizationType"
             control={control}
             render={({ field }) => (
               <RadioGroup
@@ -147,8 +164,8 @@ export function Step1CompanyInfo({
               </RadioGroup>
             )}
           />
-          {errors.organizationType && (
-            <p className="text-sm text-destructive">{errors.organizationType.message}</p>
+          {errors.step1?.organizationType && (
+            <p className="text-sm text-destructive">{errors.step1.organizationType.message}</p>
           )}
         </div>
 
@@ -156,12 +173,12 @@ export function Step1CompanyInfo({
           <Label htmlFor="companyName">Nom de l'entreprise *</Label>
           <Input
             id="companyName"
-            {...register('companyName')}
+            {...register('step1.companyName')}
             placeholder="ACME Corporation"
             data-testid="input-company-name"
           />
-          {errors.companyName && (
-            <p className="text-sm text-destructive">{errors.companyName.message}</p>
+          {errors.step1?.companyName && (
+            <p className="text-sm text-destructive">{errors.step1.companyName.message}</p>
           )}
         </div>
 
@@ -170,7 +187,7 @@ export function Step1CompanyInfo({
           <div className="relative">
             <Input
               id="siren"
-              {...register('siren')}
+              {...register('step1.siren')}
               placeholder="123456789"
               maxLength={9}
               onBlur={handleSirenBlur}
@@ -184,10 +201,10 @@ export function Step1CompanyInfo({
               <CheckCircle2 className="absolute right-3 top-3 h-4 w-4 text-green-500" />
             )}
           </div>
-          {errors.siren && (
-            <p className="text-sm text-destructive">{errors.siren.message}</p>
+          {errors.step1?.siren && (
+            <p className="text-sm text-destructive">{errors.step1.siren.message}</p>
           )}
-          {sirenError && !errors.siren && (
+          {sirenError && !errors.step1?.siren && (
             <Alert variant="destructive" className="mt-2">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{sirenError}</AlertDescription>
@@ -206,12 +223,12 @@ export function Step1CompanyInfo({
           <Input
             id="companyEmail"
             type="email"
-            {...register('companyEmail')}
+            {...register('step1.companyEmail')}
             placeholder="contact@acme.com"
             data-testid="input-company-email"
           />
-          {errors.companyEmail && (
-            <p className="text-sm text-destructive">{errors.companyEmail.message}</p>
+          {errors.step1?.companyEmail && (
+            <p className="text-sm text-destructive">{errors.step1.companyEmail.message}</p>
           )}
         </div>
 
@@ -220,7 +237,7 @@ export function Step1CompanyInfo({
           <Input
             id="phone"
             type="tel"
-            {...register('phone')}
+            {...register('step1.phone')}
             placeholder="+33 1 23 45 67 89"
             data-testid="input-phone"
           />
