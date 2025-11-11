@@ -1,9 +1,5 @@
-import { RegistrationForm } from "@/components/RegistrationForm";
+import { RegistrationForm } from "@/components/RegistrationWizard/RegistrationForm";
 
 export default function Register() {
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
-      <RegistrationForm />
-    </div>
-  );
+  return <RegistrationForm />;
 }

@@ -8,6 +8,8 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AppSidebar } from "@/components/AppSidebar";
 import { CookieBanner } from "@/components/CookieBanner";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Dashboard from "@/pages/Dashboard";
 import Events from "@/pages/Events";
 import Participants from "@/pages/Participants";
@@ -17,6 +19,7 @@ import AdminLogin from "@/pages/AdminLogin";
 import NotFound from "@/pages/not-found";
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { user, company, plan } = useAuth();
   const style = {
     "--sidebar-width": "20rem",
     "--sidebar-width-icon": "4rem",
@@ -26,10 +29,10 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
         <AppSidebar
-          userRole="company"
-          currentPlan="ESSENTIEL"
-          companyName="TechCorp"
-          userName="Jean Dupont"
+          userRole={(user?.role as "company" | "admin") || "company"}
+          currentPlan={plan?.tier || "DECOUVERTE"}
+          companyName={company?.name || ""}
+          userName={user?.email || ""}
         />
         <div className="flex flex-col flex-1 overflow-hidden">
           <header className="flex items-center justify-between p-4 border-b">
@@ -53,19 +56,25 @@ function Router() {
       <Route path="/admin/login" component={AdminLogin} />
       
       <Route path="/">
-        <DashboardLayout>
-          <Dashboard />
-        </DashboardLayout>
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Dashboard />
+          </DashboardLayout>
+        </ProtectedRoute>
       </Route>
       <Route path="/events">
-        <DashboardLayout>
-          <Events />
-        </DashboardLayout>
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Events />
+          </DashboardLayout>
+        </ProtectedRoute>
       </Route>
       <Route path="/participants">
-        <DashboardLayout>
-          <Participants />
-        </DashboardLayout>
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Participants />
+          </DashboardLayout>
+        </ProtectedRoute>
       </Route>
       
       <Route component={NotFound} />
@@ -77,11 +86,13 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TooltipProvider>
-          <Router />
-          <Toaster />
-          <CookieBanner />
-        </TooltipProvider>
+        <AuthProvider>
+          <TooltipProvider>
+            <Router />
+            <Toaster />
+            <CookieBanner />
+          </TooltipProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
