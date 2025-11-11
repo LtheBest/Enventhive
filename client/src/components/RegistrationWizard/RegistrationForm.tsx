@@ -155,7 +155,7 @@ export function RegistrationForm() {
       } else {
         // DECOUVERTE: Auto-login then redirect to dashboard
         await login(formData.step4.email, formData.step4.password);
-        setLocation('/');
+        setLocation('/dashboard');
       }
     } catch (error: any) {
       console.error('Registration error:', error);

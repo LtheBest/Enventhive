@@ -7,6 +7,7 @@ import invoiceRoutes from "./routes/invoices";
 import eventRoutes from "./routes/events";
 import plansRoutes from "./routes/plans";
 import adminRoutes from "./routes/admin";
+import dashboardRoutes from "./routes/dashboard";
 import { apiLimiter } from "./auth/rateLimiter";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -33,6 +34,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin routes (requires admin role)
   app.use('/api/admin', adminRoutes);
+
+  // Company dashboard routes
+  app.use('/api/dashboard', dashboardRoutes);
 
   // TODO: Add other routes here
   // app.use('/api/companies', companyRoutes);

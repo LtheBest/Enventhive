@@ -11,7 +11,7 @@ import { CookieBanner } from "@/components/CookieBanner";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Home from "@/pages/Home";
-import Dashboard from "@/pages/Dashboard";
+import CompanyDashboard from "@/pages/CompanyDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
 import Events from "@/pages/Events";
 import Participants from "@/pages/Participants";
@@ -63,7 +63,7 @@ function Router() {
       <Route path="/dashboard">
         <ProtectedRoute requiredRole="company">
           <DashboardLayout>
-            <Dashboard />
+            <CompanyDashboard />
           </DashboardLayout>
         </ProtectedRoute>
       </Route>
