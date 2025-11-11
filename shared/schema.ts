@@ -224,9 +224,9 @@ export const transactions = pgTable("transactions", {
   status: transactionStatusEnum("status").default("pending").notNull(),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
   stripeChargeId: text("stripe_charge_id"),
-  stripeSessionId: text("stripe_session_id"),
+  stripeSessionId: text("stripe_session_id").unique(), // Unique constraint for idempotency
   stripeSubscriptionId: text("stripe_subscription_id"),
-  stripeInvoiceId: text("stripe_invoice_id"),
+  stripeInvoiceId: text("stripe_invoice_id").unique(), // Unique constraint for renewal idempotency
   paymentMethod: varchar("payment_method", { length: 50 }),
   billingCycle: billingCycleEnum("billing_cycle"),
   failureReason: text("failure_reason"),
@@ -252,6 +252,23 @@ export const invoices = pgTable("invoices", {
   companyIdx: index("invoices_company_idx").on(table.companyId),
   invoiceNumberIdx: index("invoices_invoice_number_idx").on(table.invoiceNumber),
   transactionIdx: index("invoices_transaction_idx").on(table.transactionId),
+}));
+
+// Stripe Events - track processed webhook events for idempotency
+export const stripeEvents = pgTable("stripe_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stripeEventId: text("stripe_event_id").notNull().unique(),
+  eventType: text("event_type").notNull(),
+  processedAt: timestamp("processed_at").defaultNow().notNull(),
+  metadata: jsonb("metadata").$type<{
+    companyId?: string;
+    sessionId?: string;
+    subscriptionId?: string;
+    invoiceId?: string;
+  }>(),
+}, (table) => ({
+  stripeEventIdIdx: index("stripe_events_stripe_event_id_idx").on(table.stripeEventId),
+  eventTypeIdx: index("stripe_events_event_type_idx").on(table.eventType),
 }));
 
 // Refresh tokens for JWT authentication
@@ -304,6 +321,11 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ 
   id: true, 
   createdAt: true 
+});
+
+export const insertStripeEventSchema = createInsertSchema(stripeEvents).omit({ 
+  id: true, 
+  processedAt: true 
 });
 
 export const insertPlanSchema = createInsertSchema(plans).omit({ 

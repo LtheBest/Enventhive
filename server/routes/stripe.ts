@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { db } from '../db';
-import { companies, transactions, invoices, companyPlanState, planHistory, plans } from '@shared/schema';
+import { companies, transactions, invoices, companyPlanState, planHistory, plans, stripeEvents } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { requireAuth } from '../auth/middleware';
 import { generateInvoicePDF } from '../services/invoice';
@@ -127,28 +127,41 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
   // Handle the event
   try {
+    // Check if event has already been processed (idempotency)
+    const [existingEvent] = await db
+      .select()
+      .from(stripeEvents)
+      .where(eq(stripeEvents.stripeEventId, event.id))
+      .limit(1);
+
+    if (existingEvent) {
+      console.log(`Event ${event.id} already processed, skipping`);
+      return res.json({ received: true, processed: false });
+    }
+
+    // Process event based on type
     switch (event.type) {
       case 'checkout.session.completed':
-        await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+        await handleCheckoutCompleted(event);
         break;
 
       case 'invoice.payment_succeeded':
-        await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
+        await handleInvoicePaymentSucceeded(event);
         break;
 
       case 'invoice.payment_failed':
-        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+        await handleInvoicePaymentFailed(event);
         break;
 
       case 'customer.subscription.deleted':
-        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+        await handleSubscriptionDeleted(event);
         break;
 
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
 
-    res.json({ received: true });
+    res.json({ received: true, processed: true });
   } catch (error) {
     console.error('Webhook handler error:', error);
     res.status(500).json({ error: 'Webhook handler failed' });
@@ -156,9 +169,10 @@ router.post('/webhook', async (req: Request, res: Response) => {
 });
 
 /**
- * Handle successful checkout session
+ * Handle successful checkout session with idempotency
  */
-async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+async function handleCheckoutCompleted(event: Stripe.Event) {
+  const session = event.data.object as Stripe.Checkout.Session;
   const { companyId, planId, billingCycle, userId } = session.metadata || {};
 
   if (!companyId || !planId) {
@@ -182,66 +196,96 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   const amount = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
 
-  // Create transaction record
-  const [transaction] = await db.insert(transactions).values({
-    companyId,
-    planId,
-    amount,
-    currency: 'EUR',
-    status: 'completed',
-    stripeSessionId: session.id,
-    stripeSubscriptionId: session.subscription as string,
-    paymentMethod: 'card',
-    billingCycle: billingCycle as 'monthly' | 'annual',
-  }).returning();
-
-  console.log('Transaction created:', transaction.id);
-
   // Retrieve subscription to get period dates
   const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
   const subscriptionData = subscription as any;
 
-  // Update company plan state with subscription metadata
-  await db
-    .update(companyPlanState)
-    .set({
-      quotePending: false,
-      billingCycle: billingCycle as 'monthly' | 'annual',
-      stripeCustomerId: session.customer as string,
-      stripeSubscriptionId: session.subscription as string,
-      currentPeriodStart: new Date(subscriptionData.current_period_start * 1000),
-      currentPeriodEnd: new Date(subscriptionData.current_period_end * 1000),
-      updatedAt: new Date(),
-    })
-    .where(eq(companyPlanState.companyId, companyId));
+  let transactionId: string;
 
-  // Log plan activation in history
-  await db.insert(planHistory).values({
-    companyId,
-    oldPlanId: planId, // Same plan, just activated
-    newPlanId: planId,
-    reason: `Payment completed - ${billingCycle} subscription activated`,
-    changedByUserId: userId || null,
-  });
-
-  console.log('Company plan activated for:', companyId);
-
-  // Generate and store invoice PDF
   try {
-    const pdfUrl = await generateInvoicePDF(transaction.id);
-    console.log('Invoice PDF generated:', pdfUrl);
+    // Wrap in database transaction for atomicity
+    await db.transaction(async (tx) => {
+      // 1. Record event processing (idempotency protection)
+      await tx.insert(stripeEvents).values({
+        stripeEventId: event.id,
+        eventType: event.type,
+        metadata: {
+          companyId,
+          planId,
+          sessionId: session.id,
+          subscriptionId: session.subscription as string,
+        },
+      });
+
+      // 2. Create transaction record
+      const [transaction] = await tx.insert(transactions).values({
+        companyId,
+        planId,
+        amount,
+        currency: 'EUR',
+        status: 'completed',
+        stripeSessionId: session.id,
+        stripeSubscriptionId: session.subscription as string,
+        paymentMethod: 'card',
+        billingCycle: billingCycle as 'monthly' | 'annual',
+        paidAt: new Date(),
+      }).returning();
+
+      transactionId = transaction.id;
+      console.log('Transaction created:', transaction.id);
+
+      // 3. Update company plan state with subscription metadata
+      await tx
+        .update(companyPlanState)
+        .set({
+          quotePending: false,
+          billingCycle: billingCycle as 'monthly' | 'annual',
+          stripeCustomerId: session.customer as string,
+          stripeSubscriptionId: session.subscription as string,
+          currentPeriodStart: new Date(subscriptionData.current_period_start * 1000),
+          currentPeriodEnd: new Date(subscriptionData.current_period_end * 1000),
+          updatedAt: new Date(),
+        })
+        .where(eq(companyPlanState.companyId, companyId));
+
+      // 4. Log plan activation in history
+      await tx.insert(planHistory).values({
+        companyId,
+        oldPlanId: planId, // Same plan, just activated
+        newPlanId: planId,
+        reason: `Payment completed - ${billingCycle} subscription activated`,
+        changedByUserId: userId || null,
+      });
+
+      console.log('Company plan activated for:', companyId);
+    });
+
+    // 5. Generate PDF invoice AFTER transaction success (outside DB transaction)
+    try {
+      const pdfUrl = await generateInvoicePDF(transactionId);
+      console.log('Invoice PDF generated:', pdfUrl);
+    } catch (error: any) {
+      console.error('Failed to generate invoice PDF:', error);
+      // Don't fail if PDF generation fails - can be regenerated later
+    }
   } catch (error: any) {
-    console.error('Failed to generate invoice PDF:', error);
-    // Don't fail the whole transaction if PDF generation fails
-    // The invoice can be regenerated later
+    // Handle unique constraint violation (event already processed)
+    if (error.code === '23505' && error.constraint === 'stripe_events_stripe_event_id_unique') {
+      console.log(`Event ${event.id} already processed (caught constraint violation)`);
+      return;
+    }
+    // Re-throw other errors
+    throw error;
   }
 }
 
 /**
- * Handle successful invoice payment
+ * Handle successful invoice payment with idempotency
  * Triggered for subscription renewals
  */
-async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
+async function handleInvoicePaymentSucceeded(event: Stripe.Event) {
+  const invoice = event.data.object as Stripe.Invoice;
+  
   // Extract subscription ID from invoice (can be string or expanded object)
   const invoiceData = invoice as any;
   const subscriptionId = typeof invoiceData.subscription === 'string' 
@@ -258,18 +302,6 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     return;
   }
 
-  // Check if we already have a transaction for this invoice
-  const [existingInvoiceTransaction] = await db
-    .select()
-    .from(transactions)
-    .where(eq(transactions.stripeInvoiceId, invoice.id))
-    .limit(1);
-
-  if (existingInvoiceTransaction) {
-    console.log('Transaction already exists for invoice:', invoice.id);
-    return;
-  }
-
   // Find company by subscription ID
   const [existingTransaction] = await db
     .select()
@@ -282,23 +314,6 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     return;
   }
 
-  // Create new transaction for renewal
-  const [transaction] = await db.insert(transactions).values({
-    companyId: existingTransaction.companyId,
-    planId: existingTransaction.planId,
-    amount: (invoice.amount_paid / 100).toString(), // Convert from cents
-    currency: 'EUR',
-    status: 'completed',
-    stripeSubscriptionId: subscriptionId,
-    stripeInvoiceId: invoice.id,
-    paymentMethod: 'card',
-    billingCycle: existingTransaction.billingCycle,
-  }).returning();
-
-  console.log('Renewal transaction created:', transaction.id);
-
-  // Update company plan state with new period dates
-  // This keeps subscription metadata current after each renewal
   const periodStart = invoiceData.period_start 
     ? new Date(invoiceData.period_start * 1000) 
     : undefined;
@@ -306,32 +321,78 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     ? new Date(invoiceData.period_end * 1000) 
     : undefined;
 
-  if (periodStart && periodEnd) {
-    await db
-      .update(companyPlanState)
-      .set({
-        currentPeriodStart: periodStart,
-        currentPeriodEnd: periodEnd,
-        updatedAt: new Date(),
-      })
-      .where(eq(companyPlanState.companyId, existingTransaction.companyId));
-  }
+  let transactionId: string;
 
-  // Generate and store invoice PDF for renewal
   try {
-    const pdfUrl = await generateInvoicePDF(transaction.id);
-    console.log('Renewal invoice PDF generated:', pdfUrl);
+    // Wrap in database transaction for atomicity
+    await db.transaction(async (tx) => {
+      // 1. Record event processing (idempotency protection)
+      await tx.insert(stripeEvents).values({
+        stripeEventId: event.id,
+        eventType: event.type,
+        metadata: {
+          companyId: existingTransaction.companyId,
+          planId: existingTransaction.planId,
+          subscriptionId,
+          invoiceId: invoice.id,
+        },
+      });
+
+      // 2. Create new transaction for renewal
+      const [transaction] = await tx.insert(transactions).values({
+        companyId: existingTransaction.companyId,
+        planId: existingTransaction.planId,
+        amount: (invoice.amount_paid / 100).toString(), // Convert from cents
+        currency: 'EUR',
+        status: 'completed',
+        stripeSubscriptionId: subscriptionId,
+        stripeInvoiceId: invoice.id,
+        paymentMethod: 'card',
+        billingCycle: existingTransaction.billingCycle,
+        paidAt: new Date(),
+      }).returning();
+
+      transactionId = transaction.id;
+      console.log('Renewal transaction created:', transaction.id);
+
+      // 3. Update company plan state with new period dates
+      if (periodStart && periodEnd) {
+        await tx
+          .update(companyPlanState)
+          .set({
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            updatedAt: new Date(),
+          })
+          .where(eq(companyPlanState.companyId, existingTransaction.companyId));
+      }
+    });
+
+    // 4. Generate PDF invoice AFTER transaction success (outside DB transaction)
+    try {
+      const pdfUrl = await generateInvoicePDF(transactionId);
+      console.log('Renewal invoice PDF generated:', pdfUrl);
+    } catch (error: any) {
+      console.error('Failed to generate renewal invoice PDF:', error);
+      // Don't fail if PDF generation fails - can be regenerated later
+    }
   } catch (error: any) {
-    console.error('Failed to generate renewal invoice PDF:', error);
-    // Don't fail the whole transaction if PDF generation fails
-    // The invoice can be regenerated later
+    // Handle unique constraint violation (event already processed)
+    if (error.code === '23505' && error.constraint === 'stripe_events_stripe_event_id_unique') {
+      console.log(`Event ${event.id} already processed (caught constraint violation)`);
+      return;
+    }
+    // Re-throw other errors
+    throw error;
   }
 }
 
 /**
  * Handle failed invoice payment
  */
-async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
+async function handleInvoicePaymentFailed(event: Stripe.Event) {
+  const invoice = event.data.object as Stripe.Invoice;
+  
   // Extract subscription ID from invoice (can be string or expanded object)
   const invoiceData = invoice as any;
   const subscriptionId = typeof invoiceData.subscription === 'string' 
@@ -366,7 +427,9 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
 /**
  * Handle subscription deletion/cancellation
  */
-async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+async function handleSubscriptionDeleted(event: Stripe.Event) {
+  const subscription = event.data.object as Stripe.Subscription;
+  
   // Find company by subscription ID
   const [transaction] = await db
     .select()

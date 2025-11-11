@@ -78,6 +78,86 @@ Registration endpoints:
 - Returns full address details (street, city, postal code, coordinates)
 - No authentication required
 
+#### 5. Stripe Payment Integration ✅
+
+**Checkout Session Creation** (`server/routes/stripe.ts`)
+- POST `/api/stripe/create-checkout-session` - Create Stripe checkout for ESSENTIEL plan
+- Session metadata includes: companyId, planId, userId
+- Duplicate transaction prevention using idempotency keys
+- Success/cancel URLs with session tracking
+- Environment: STRIPE_SECRET_KEY, VITE_STRIPE_PUBLIC_KEY
+
+**Webhook Handler** (`server/routes/stripe.ts`)
+- POST `/api/stripe/webhook` - Handle Stripe events with rawBody
+- Signature verification using stripe.webhooks.constructEvent
+- Events handled:
+  - `checkout.session.completed` - Initial payment completion
+  - `invoice.payment_succeeded` - Subscription renewals
+- Automatic plan state updates in companyPlanState
+- Transaction logging in transactions table
+- PDF invoice generation triggered automatically
+
+**Transaction Management & Idempotency**
+- Idempotent checkout session creation with duplicate prevention
+- Webhook idempotency guaranteed via `stripeEvents` table
+- Stripe event ID tracking prevents duplicate processing on retries
+- Atomic DB transactions: stripeEvent → transaction → planState → history
+- Unique constraints: `stripeSessionId`, `stripeInvoiceId` for DB-level protection
+- PDF generation outside transaction (post-commit hook)
+- Full audit trail in planHistory table
+
+#### 6. PDF Invoice Generation ✅
+
+**Invoice Service** (`server/services/invoice.ts`)
+- Automatic invoice generation after successful payment
+- Uses pdfkit for PDF creation
+- Stores PDFs in Object Storage (not ephemeral filesystem)
+- Invoice format: TEAMMOVE-YYYY-{sequential}
+- Includes: company details, plan info, amount, date, transaction ID
+- Professional layout with proper formatting
+
+**Invoice Endpoints** (`server/routes/invoices.ts`)
+- GET `/api/invoices/:invoiceNumber` - Download specific invoice (authenticated)
+- GET `/api/invoices/company/:companyId` - List all company invoices (authenticated)
+- Access control: Users can only download their company's invoices, admins can access all
+- Content-Type: application/pdf with proper disposition headers
+
+**Object Storage Integration**
+- PDFs stored in private Object Storage bucket (.private/invoices/)
+- Avoids ephemeral filesystem issues on Replit
+- Persistent storage across restarts
+- Automatic cleanup not implemented (invoices kept indefinitely)
+
+#### 7. Event Management ✅
+
+**Event CRUD Operations** (`server/routes/events.ts`)
+- POST `/api/events` - Create event with automatic QR code generation
+- GET `/api/events` - List company events with filters:
+  - status: upcoming, ongoing, completed, cancelled
+  - city: filter by location
+  - startDate: events starting after date (validated)
+  - endDate: events ending before date (validated)
+- GET `/api/events/:id` - Get single event details
+- PATCH `/api/events/:id` - Update event (with ownership check)
+- DELETE `/api/events/:id` - Delete event (cascade to related data)
+- POST `/api/events/:id/qrcode` - Regenerate QR code for event
+
+**Event Features**
+- Multi-tenant isolation (companyId scoping)
+- Automatic QR code generation on creation
+- Date validation with proper 400 errors for invalid dates
+- Graceful error handling for QR code failures
+- Ownership verification on all mutations
+- Prevents manual tampering with companyId/qrCode fields
+
+**QR Code Generation** (`server/services/qrcode.ts`)
+- Automatic QR code generation using qrcode library
+- QR codes point to event page: `https://{domain}/events/{eventId}`
+- Environment-aware URL building (REPLIT_DOMAIN for production)
+- Data URL format (base64 PNG) stored directly in database
+- 300px size, error correction level M
+- Manual regeneration endpoint available
+
 ### Security Features
 - **JWT Secrets**: Required from environment, no hardcoded fallbacks
 - **Database Transactions**: All registration flows use atomic transactions
@@ -135,36 +215,45 @@ DEFAULT_OBJECT_STORAGE_BUCKET_ID=...
 ## Next Steps
 
 ### Immediate Priorities
-1. **Stripe Payment Integration**
-   - Checkout session creation for ESSENTIEL plan
-   - Webhook handler for payment confirmation
-   - Update companyPlanState after successful payment
-   - PDF invoice generation
-
-2. **Event Management**
-   - CRUD operations for events
-   - Multi-day event parent/child relationship
-   - QR code generation per event
-   - Capacity management
-
-3. **Participant Management**
+1. **Participant Management**
    - Import participants (CSV/Excel)
    - Location-based matching algorithm
    - Vehicle assignment
    - Carpooling optimization
+   - Participant CRUD operations
 
-4. **Frontend Integration**
-   - Connect registration pages to new validation endpoints
-   - Implement SIREN autocomplete with company name display
-   - French address autocomplete UI
-   - Payment flow with Stripe Elements
+2. **Frontend Development**
+   - Complete registration flow UI with SIREN/address autocomplete
+   - Company dashboard with event management
+   - Stripe checkout flow integration
+   - Event creation/editing forms
+   - QR code display and download
+   - Invoice viewing and download
+   - Participant management interface
+   - Carpooling assignment interface
+
+3. **Multi-day Event Support**
+   - EventParent implementation for recurring events
+   - Event series management UI
+   - Automatic event generation from rrule
+   - Parent-child relationship management
+
+4. **Admin Features**
+   - Admin dashboard for company management
+   - Quote approval workflow (PRO/PREMIUM plans)
+   - Manual plan assignment/upgrades
+   - Transaction history and analytics
+   - Company activity monitoring
 
 ### Future Enhancements
-- Admin dashboard for quote approval (PRO/PREMIUM)
-- Analytics and reporting
-- Email notifications
+- Analytics and reporting dashboards
+- Email notifications (registration, payments, events)
+- SMS notifications for event reminders
 - Mobile app considerations
-- Export features
+- Export features (participants, events, invoices)
+- Webhook management UI for Stripe
+- Advanced carpooling optimization algorithms
+- Multi-language support (EN/FR)
 
 ## File Structure
 ```
@@ -175,13 +264,26 @@ DEFAULT_OBJECT_STORAGE_BUCKET_ID=...
 │       └── lib/            # Client utilities
 ├── server/
 │   ├── auth/              # Authentication logic
+│   │   ├── jwt.ts         # JWT token generation/verification
+│   │   ├── middleware.ts  # Auth middleware (requireAuth, requireAdmin, requireCompany)
+│   │   └── rateLimiter.ts # Rate limiting configuration
 │   ├── routes/            # API routes
-│   ├── services/          # External API integrations
+│   │   ├── auth.ts        # Login, logout, refresh, me
+│   │   ├── registration.ts # Multi-step registration with validation
+│   │   ├── stripe.ts      # Checkout sessions and webhooks
+│   │   ├── invoices.ts    # PDF invoice download endpoints
+│   │   └── events.ts      # Event CRUD with QR codes
+│   ├── services/          # Business logic services
+│   │   ├── siren.ts       # SIREN validation via api.gouv.fr
+│   │   ├── address.ts     # French address autocomplete
+│   │   ├── invoice.ts     # PDF invoice generation with pdfkit
+│   │   └── qrcode.ts      # QR code generation for events
 │   ├── utils/             # Server utilities
 │   ├── db.ts              # Database connection
-│   └── seed.ts            # Database seeding
+│   ├── seed.ts            # Database seeding
+│   └── routes.ts          # Route registration
 ├── shared/
-│   └── schema.ts          # Shared database schema
+│   └── schema.ts          # Shared database schema (13 tables)
 └── design_guidelines.md   # UI/UX design system
 ```
 
