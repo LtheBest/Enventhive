@@ -14,18 +14,24 @@ The frontend is built with React and TypeScript, leveraging the Carbon Design Sy
 The backend is powered by Express.js, using Drizzle ORM with a PostgreSQL database. Authentication is JWT-based, and payments are handled via Stripe. The system employs rate limiting and various security middleware. Multi-tenancy is central to the design, with strict `companyId` scoping across all business tables, differentiating between users (employees) and participants (external guests), and implementing role-based access control (admin, company). Feature activation is dynamically managed based on the subscription plan.
 
 #### Feature Specifications
-- **Authentication**: JWT-based with access and refresh tokens, rate limiting, and brute-force protection.
+- **Authentication**: JWT-based with access and refresh tokens stored in localStorage, rate limiting, and brute-force protection. All API requests include Authorization Bearer token header via queryClient.
 - **Multi-step Company Registration**: Three distinct flows based on subscription tier (Free, Paid, Quote Required), ensuring atomic transactions for data integrity.
 - **Stripe Payment Integration**: Handles checkout session creation, webhook processing for payment status updates, and idempotent transaction management.
 - **PDF Invoice Generation**: Automatic generation and secure storage of professional PDF invoices in object storage, accessible with role-based permissions.
 - **Event Management**: Full CRUD operations for events, including automatic QR code generation, multi-tenant isolation, and comprehensive filtering capabilities.
-- **Security**: Focus on environment variable-based secrets, bcrypt password hashing, input validation via Zod schemas, and multi-tenant isolation.
+- **Plan-Based Feature System**: Complete feature gating and resource quota enforcement across all subscription tiers (Découverte/Essentiel/Pro/Premium):
+  - **Frontend**: PlanFeaturesContext provides hasFeature(), canAddMore(), getLimit() helpers consumed by FeatureGate and LimitGate components
+  - **Backend**: Middleware (checkEventLimit, checkParticipantLimit, checkVehicleLimit, requireFeature) with ownership verification to prevent cross-tenant abuse
+  - **API**: GET /api/plans/current-features returns company's plan features and quota status
+  - **UI**: Dedicated /plan-features page displays tier capabilities, locked features with upgrade prompts, and current usage against limits
+- **Security**: Environment variable-based secrets, bcrypt password hashing, input validation via Zod schemas, multi-tenant isolation with ownership checks, and CSRF protection.
 
 #### System Design Choices
-- **Multi-tenant Design**: Core architectural decision ensuring data isolation and scalability for multiple companies.
+- **Multi-tenant Design**: Core architectural decision ensuring data isolation and scalability for multiple companies. All resource limits verified with ownership checks (event.companyId === req.user.companyId).
 - **Object Storage**: Utilized for persistent storage of invoices to avoid ephemeral filesystem issues.
 - **Atomic Database Transactions**: Ensures data consistency and integrity, particularly during critical operations like registration and payment processing.
 - **Idempotency**: Implemented for payment processing and Stripe webhooks to prevent duplicate transactions.
+- **Plan-Based Access Control**: Feature flags and resource quotas dynamically enforced across frontend (FeatureGate/LimitGate) and backend (middleware) based on company subscription tier.
 
 ### External Dependencies
 - **PostgreSQL**: Primary database for all application data.
