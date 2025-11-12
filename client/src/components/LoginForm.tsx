@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { MathCaptcha } from "@/components/MathCaptcha";
 
 interface LoginFormProps {
   userType?: "company" | "admin";
@@ -20,6 +21,15 @@ export function LoginForm({ userType = "company" }: LoginFormProps) {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [captchaValid, setCaptchaValid] = useState(false);
+  const [captchaChallenge, setCaptchaChallenge] = useState("");
+  const [captchaResponse, setCaptchaResponse] = useState("");
+
+  const handleCaptchaValidate = (isValid: boolean, challenge: string, response: string) => {
+    setCaptchaValid(isValid);
+    setCaptchaChallenge(challenge);
+    setCaptchaResponse(response);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,8 +42,14 @@ export function LoginForm({ userType = "company" }: LoginFormProps) {
       return;
     }
 
+    if (!captchaValid) {
+      setError("Veuillez résoudre le calcul de sécurité");
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      await login(email, password);
+      await login(email, password, remember, captchaChallenge, captchaResponse);
     } catch (err: any) {
       console.error('Login error:', err);
       
@@ -43,6 +59,8 @@ export function LoginForm({ userType = "company" }: LoginFormProps) {
         setError("Email ou mot de passe incorrect");
       } else if (err.message && err.message.includes('Account locked')) {
         setError("Compte verrouillé suite à trop de tentatives. Réessayez dans 30 minutes.");
+      } else if (err.message && err.message.includes('captcha')) {
+        setError("Vérification de sécurité échouée. Veuillez réessayer.");
       } else {
         setError("Une erreur est survenue. Veuillez réessayer.");
       }
@@ -117,11 +135,13 @@ export function LoginForm({ userType = "company" }: LoginFormProps) {
             </Label>
           </div>
 
+          <MathCaptcha onValidate={handleCaptchaValidate} />
+
           <Button 
             type="submit" 
             className="w-full"
             data-testid="button-login"
-            disabled={isLoading}
+            disabled={isLoading || !captchaValid}
           >
             {isLoading ? (
               <>

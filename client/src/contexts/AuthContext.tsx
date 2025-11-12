@@ -34,7 +34,7 @@ interface AuthContextType {
   company: Company | null;
   plan: Plan | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, remember?: boolean, captchaChallenge?: string, captchaResponse?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   authenticateWithToken: (token: string) => Promise<void>;
@@ -107,12 +107,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadUserData();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, remember: boolean = false, captchaChallenge?: string, captchaResponse?: string) => {
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ 
+          email, 
+          password, 
+          remember,
+          captchaChallenge, 
+          captchaResponse 
+        }),
       });
 
       if (!response.ok) {
