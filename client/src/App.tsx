@@ -18,6 +18,7 @@ import AdminCompanies from "@/pages/AdminCompanies";
 import AdminValidations from "@/pages/AdminValidations";
 import AdminStats from "@/pages/AdminStats";
 import AdminSettings from "@/pages/AdminSettings";
+import AdminMessages from "@/pages/AdminMessages";
 import Events from "@/pages/Events";
 import Participants from "@/pages/Participants";
 import Vehicles from "@/pages/Vehicles";
@@ -164,6 +165,13 @@ function Router() {
         <ProtectedRoute requiredRole="admin">
           <DashboardLayout>
             <AdminSettings />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/messages">
+        <ProtectedRoute requiredRole="admin">
+          <DashboardLayout>
+            <AdminMessages />
           </DashboardLayout>
         </ProtectedRoute>
       </Route>
