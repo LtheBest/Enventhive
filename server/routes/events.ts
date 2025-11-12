@@ -1,12 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
-import { events, eventParents } from '@shared/schema';
+import { events, eventParents, companies } from '@shared/schema';
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { requireAuth } from '../auth/middleware';
 import { checkEventLimit } from '../middleware/planLimits';
 import { createInsertSchema } from 'drizzle-zod';
 import { z } from 'zod';
 import { generateEventQRCode } from '../services/qrcode';
+import { sendEventCreatedEmail } from '../services/email';
 
 const router = Router();
 
@@ -63,6 +64,22 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
         .set({ qrCode })
         .where(eq(events.id, event.id))
         .returning();
+      
+      // Get company info for email
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, user.companyId!))
+        .limit(1);
+      
+      // Send confirmation email (non-blocking)
+      if (company) {
+        sendEventCreatedEmail({
+          company,
+          event: updatedEvent,
+          creatorEmail: user.email,
+        }).catch(err => console.error('Event created email error:', err));
+      }
       
       res.status(201).json({ event: updatedEvent });
     } catch (qrError) {
