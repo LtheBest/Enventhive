@@ -12,6 +12,7 @@ import { validateSirenWithApi } from '../services/siren';
 import { searchFrenchAddresses, validateFrenchAddress } from '../services/address';
 import { createStripeCheckoutSession } from './stripe';
 import { verifyCaptchaResponse } from '../utils/captcha';
+import { sendWelcomeEmail } from '../services/email';
 
 const router = Router();
 
@@ -191,6 +192,14 @@ async function handleFreeRegistration(
 
       return { company, user };
     });
+
+    // Send welcome email (non-blocking)
+    sendWelcomeEmail({
+      company: result.company,
+      userEmail: result.user.email,
+      userFirstName: result.user.firstName || undefined,
+      planName: plan.name,
+    }).catch(err => console.error('Welcome email error:', err));
 
     // Generate tokens after successful transaction
     const accessToken = generateAccessToken({
@@ -386,6 +395,14 @@ async function handleQuoteRequiredRegistration(
 
       return { company, user };
     });
+
+    // Send welcome email (non-blocking)
+    sendWelcomeEmail({
+      company: result.company,
+      userEmail: result.user.email,
+      userFirstName: result.user.firstName || undefined,
+      planName: plan.name,
+    }).catch(err => console.error('Welcome email error:', err));
 
     // Generate tokens after successful transaction
     const accessToken = generateAccessToken({

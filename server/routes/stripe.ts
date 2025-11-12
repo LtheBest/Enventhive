@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { db } from '../db';
-import { companies, transactions, invoices, companyPlanState, planHistory, plans, stripeEvents } from '@shared/schema';
+import { companies, transactions, invoices, companyPlanState, planHistory, plans, stripeEvents, users } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { requireAuth } from '../auth/middleware';
 import { generateInvoicePDF } from '../services/invoice';
+import { sendPaymentFailedEmail } from '../services/email';
 
 const router = Router();
 
@@ -449,10 +450,49 @@ async function handleInvoicePaymentFailed(event: Stripe.Event) {
 
   console.log('Payment failed for company:', transaction.companyId);
 
+  // Get company info
+  const [company] = await db
+    .select()
+    .from(companies)
+    .where(eq(companies.id, transaction.companyId))
+    .limit(1);
+
+  if (company) {
+    // Get plan info
+    const [plan] = await db
+      .select()
+      .from(plans)
+      .where(eq(plans.id, transaction.planId))
+      .limit(1);
+
+    // Get company admin email
+    const [admin] = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.companyId, company.id),
+          eq(users.role, 'company')
+        )
+      )
+      .limit(1);
+
+    if (plan && admin) {
+      const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+
+      // Send payment failed email (non-blocking)
+      sendPaymentFailedEmail({
+        company,
+        userEmail: admin.email,
+        planName: plan.name,
+        amount: `${transaction.amount} €`,
+        retryUrl: `${BASE_URL}/billing`,
+      }).catch(err => console.error('Payment failed email error:', err));
+    }
+  }
+
   // TODO: Implement grace period logic
-  // For now, just log the failure
   // In production, you might want to:
-  // - Send notification email
   // - Set a grace period
   // - Downgrade to free plan after X days
 }
