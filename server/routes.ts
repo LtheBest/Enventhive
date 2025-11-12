@@ -6,6 +6,7 @@ import registrationVerifyRoutes from "./routes/registration-verify";
 import stripeRoutes from "./routes/stripe";
 import invoiceRoutes from "./routes/invoices";
 import eventRoutes from "./routes/events";
+import participantRoutes from "./routes/participants";
 import plansRoutes from "./routes/plans";
 import adminRoutes from "./routes/admin";
 import dashboardRoutes from "./routes/dashboard";
@@ -35,6 +36,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Event management routes
   app.use('/api/events', eventRoutes);
 
+  // Participant management routes
+  app.use('/api/participants', participantRoutes);
+
   // Plans routes (public access to view plans)
   app.use('/api/plans', plansRoutes);
 
@@ -43,11 +47,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Company dashboard routes
   app.use('/api/dashboard', dashboardRoutes);
-
-  // TODO: Add other routes here
-  // app.use('/api/companies', companyRoutes);
-  // app.use('/api/participants', participantRoutes);
-  // etc.
 
   const httpServer = createServer(app);
 
