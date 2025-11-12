@@ -109,12 +109,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string, remember: boolean = false, captchaChallenge?: string, captchaResponse?: string) => {
     try {
-      console.log('[AuthContext] Starting login with CAPTCHA:', { 
-        email, 
-        hasCaptchaChallenge: !!captchaChallenge, 
-        hasCaptchaResponse: !!captchaResponse 
-      });
-      
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,31 +121,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
       });
 
-      console.log('[AuthContext] Login response status:', response.status);
-
       if (!response.ok) {
         const error = await response.json();
-        console.error('[AuthContext] Login failed:', error);
         throw new Error(error.error || `HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('[AuthContext] Login successful, received token:', { hasToken: !!data.accessToken });
       localStorage.setItem('access_token', data.accessToken);
       
       // Load user data first to get role
-      console.log('[AuthContext] Fetching user data with token...');
       const userData = await fetch('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${data.accessToken}`,
         },
       });
       
-      console.log('[AuthContext] User data response status:', userData.status);
-      
       if (userData.ok) {
         const { user: userInfo, company: companyInfo, plan: planInfo } = await userData.json();
-        console.log('[AuthContext] User data loaded:', { role: userInfo.role, email: userInfo.email });
         
         // Update state first
         setUser(userInfo);
@@ -161,20 +147,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Wait for state update to complete using setTimeout (next tick)
         // This ensures ProtectedRoute sees the updated user before redirect
         const redirectPath = userInfo.role === 'admin' ? '/admin' : '/dashboard';
-        console.log('[AuthContext] Will redirect to:', redirectPath, 'after state update');
         
         setTimeout(() => {
-          console.log('[AuthContext] Now redirecting to:', redirectPath);
           setLocation(redirectPath);
-          console.log('[AuthContext] Login complete');
         }, 0);
       } else {
-        const errorData = await userData.text();
-        console.error('[AuthContext] Failed to load user data:', { status: userData.status, error: errorData });
         throw new Error('Failed to load user data');
       }
     } catch (error: any) {
-      console.error('[AuthContext] Login failed:', error);
+      console.error('Login failed:', error);
       throw error;
     }
   };
