@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { MathCaptcha } from "@/components/MathCaptcha";
 import { step4Schema } from "./types";
 
 interface Step4Props {
@@ -13,9 +14,11 @@ interface Step4Props {
   onSubmit: () => void;
   isSubmitting: boolean;
   submitError: string | null;
+  onCaptchaValidate: (isValid: boolean, challenge: string, response: string) => void;
+  isCaptchaValid: boolean;
 }
 
-export function Step4UserAccount({ onBack, onSubmit, isSubmitting, submitError }: Step4Props) {
+export function Step4UserAccount({ onBack, onSubmit, isSubmitting, submitError, onCaptchaValidate, isCaptchaValid }: Step4Props) {
   const { control, formState: { errors }, watch, setError, clearErrors } = useFormContext();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -203,6 +206,8 @@ export function Step4UserAccount({ onBack, onSubmit, isSubmitting, submitError }
           />
         </div>
 
+        <MathCaptcha onValidate={onCaptchaValidate} />
+
         {/* Navigation Buttons */}
         <div className="flex justify-between pt-4">
           <Button
@@ -217,7 +222,7 @@ export function Step4UserAccount({ onBack, onSubmit, isSubmitting, submitError }
           <Button
             type="button"
             onClick={onSubmit}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !isCaptchaValid}
             data-testid="button-submit"
           >
             {isSubmitting ? (

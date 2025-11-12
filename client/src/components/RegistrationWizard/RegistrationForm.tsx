@@ -18,7 +18,10 @@ export function RegistrationForm() {
   const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const { authenticateWithToken } = useAuth();
+  const { authenticateWithToken} = useAuth();
+  const [captchaValid, setCaptchaValid] = useState(false);
+  const [captchaChallenge, setCaptchaChallenge] = useState("");
+  const [captchaResponse, setCaptchaResponse] = useState("");
 
   // Parse step from URL query params (using wouter's useSearch)
   const searchParams = new URLSearchParams(search);
@@ -82,9 +85,21 @@ export function RegistrationForm() {
     dispatch({ type: 'UPDATE_STEP_3', data: { planId, planTier: tier } });
   };
 
+  const handleCaptchaValidate = (isValid: boolean, challenge: string, response: string) => {
+    setCaptchaValid(isValid);
+    setCaptchaChallenge(challenge);
+    setCaptchaResponse(response);
+  };
+
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     setSubmitError(null);
+
+    if (!captchaValid) {
+      setSubmitError("Veuillez résoudre le calcul de sécurité");
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       // Validate entire form before submitting
@@ -122,6 +137,10 @@ export function RegistrationForm() {
         lastName: formData.step4?.lastName,
         email: formData.step4?.email,
         password: formData.step4?.password,
+        
+        // Captcha verification
+        captchaChallenge,
+        captchaResponse,
       };
 
       console.log('[RegistrationForm] Submitting payload:', {
@@ -234,6 +253,8 @@ export function RegistrationForm() {
                   onSubmit={handleFinalSubmit}
                   isSubmitting={isSubmitting}
                   submitError={submitError}
+                  onCaptchaValidate={handleCaptchaValidate}
+                  isCaptchaValid={captchaValid}
                 />
               )}
             </FormProvider>
