@@ -7,7 +7,8 @@ interface CaptchaPayload {
   num1: number;
   num2: number;
   operator: '+' | '-' | '*';
-  answer: number;
+  // SECURITY: Do NOT include answer in payload - JWT is base64-decodable
+  // Answer is recalculated during verification from num1, num2, operator
   iat: number; // issued at
 }
 
@@ -24,26 +25,14 @@ export function generateCaptchaChallenge(): { challenge: string; token: string }
   const operators: Array<'+' | '-' | '*'> = ['+', '-', '*'];
   const operator = operators[Math.floor(Math.random() * operators.length)];
   
-  // Calculate correct answer
-  let answer: number;
-  switch (operator) {
-    case '+':
-      answer = num1 + num2;
-      break;
-    case '-':
-      answer = num1 - num2;
-      break;
-    case '*':
-      answer = num1 * num2;
-      break;
-  }
-  
-  // Create payload (server-controlled operands/operator/answer)
+  // Create payload (server-controlled operands/operator)
+  // SECURITY: Do NOT include the answer in the payload
+  // JWT payload is base64-decodable, so including answer would allow
+  // attackers to extract it without solving the CAPTCHA
   const payload: CaptchaPayload = {
     num1,
     num2,
     operator,
-    answer,
     iat: Math.floor(Date.now() / 1000),
   };
   
@@ -81,17 +70,36 @@ export function verifyCaptchaResponse(token: string, userResponse: string): bool
       return false;
     }
     
-    // Verify user's answer matches server-calculated answer
+    // Recalculate expected answer from token payload
+    // This keeps the answer server-side only
+    let expectedAnswer: number;
+    switch (decoded.operator) {
+      case '+':
+        expectedAnswer = decoded.num1 + decoded.num2;
+        break;
+      case '-':
+        expectedAnswer = decoded.num1 - decoded.num2;
+        break;
+      case '*':
+        expectedAnswer = decoded.num1 * decoded.num2;
+        break;
+      default:
+        // Defensive: reject unexpected operators
+        console.error('[CAPTCHA] Unexpected operator in token:', decoded.operator);
+        return false;
+    }
+    
+    // Verify user's answer matches server-recalculated answer
     const userAnswer = parseInt(userResponse, 10);
     if (isNaN(userAnswer)) {
       return false;
     }
     
-    const isValid = userAnswer === decoded.answer;
+    const isValid = userAnswer === expectedAnswer;
     
     if (!isValid) {
       console.warn('[CAPTCHA] Invalid answer', {
-        expected: decoded.answer,
+        expected: expectedAnswer,
         received: userAnswer,
       });
     }
