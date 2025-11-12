@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { db } from './db';
 import { plans, users } from '@shared/schema';
 import { eq } from 'drizzle-orm';

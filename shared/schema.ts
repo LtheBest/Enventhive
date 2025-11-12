@@ -284,6 +284,38 @@ export const refreshTokens = pgTable("refresh_tokens", {
   expiresAtIdx: index("refresh_tokens_expires_at_idx").on(table.expiresAt),
 }));
 
+// Message type enum
+export const messageTypeEnum = pgEnum("message_type", ["individual", "group", "broadcast"]);
+export const messageStatusEnum = pgEnum("message_status", ["sent", "read", "archived"]);
+
+// Admin Messages - for admin to company communications
+export const adminMessages = pgTable("admin_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sentByUserId: varchar("sent_by_user_id").references(() => users.id, { onDelete: "set null" }).notNull(),
+  messageType: messageTypeEnum("message_type").notNull(),
+  subject: text("subject").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  sentByIdx: index("admin_messages_sent_by_idx").on(table.sentByUserId),
+  typeIdx: index("admin_messages_type_idx").on(table.messageType),
+  createdAtIdx: index("admin_messages_created_at_idx").on(table.createdAt),
+}));
+
+// Message Recipients - track which companies received which messages
+export const messageRecipients = pgTable("message_recipients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").references(() => adminMessages.id, { onDelete: "cascade" }).notNull(),
+  companyId: varchar("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  status: messageStatusEnum("status").default("sent").notNull(),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  messageIdx: index("message_recipients_message_idx").on(table.messageId),
+  companyIdx: index("message_recipients_company_idx").on(table.companyId),
+  statusIdx: index("message_recipients_status_idx").on(table.status),
+}));
+
 // Insert schemas with validation
 export const insertCompanySchema = createInsertSchema(companies, {
   email: z.string().email(),
@@ -372,3 +404,19 @@ export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 
 export type RefreshToken = typeof refreshTokens.$inferSelect;
+
+export type AdminMessage = typeof adminMessages.$inferSelect;
+export type MessageRecipient = typeof messageRecipients.$inferSelect;
+
+export const insertAdminMessageSchema = createInsertSchema(adminMessages).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export const insertMessageRecipientSchema = createInsertSchema(messageRecipients).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export type InsertAdminMessage = z.infer<typeof insertAdminMessageSchema>;
+export type InsertMessageRecipient = z.infer<typeof insertMessageRecipientSchema>;
