@@ -52,6 +52,20 @@ export default function AdminCompanies() {
   // Fetch companies
   const { data: companiesData, isLoading } = useQuery({
     queryKey: ['/api/admin/companies'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/companies', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch companies');
+      }
+
+      return response.json();
+    }
   });
 
   // Fetch plans for bulk change
