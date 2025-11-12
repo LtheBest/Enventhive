@@ -2,8 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Users, Car, TrendingUp, Plus, Settings, CreditCard } from "lucide-react";
+import { Calendar, Users, Car, TrendingUp, Plus, Settings, CreditCard, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
+import { usePlanFeatures } from "@/contexts/PlanFeaturesContext";
+import { LimitGate } from "@/components/FeatureGate";
 
 interface DashboardStats {
   totalEvents: number;
@@ -27,7 +29,9 @@ export default function CompanyDashboard() {
     queryKey: ['/api/events', { limit: 5 }],
   });
 
-  if (isLoading) {
+  const { planData, getLimit, canAddMore, isLoading: planLoading } = usePlanFeatures();
+
+  if (isLoading || planLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-muted-foreground">Chargement...</div>
@@ -36,14 +40,18 @@ export default function CompanyDashboard() {
   }
 
   const planConfig = {
-    DECOUVERTE: { color: "bg-blue-500", label: "Découverte", maxEvents: 5 },
-    ESSENTIEL: { color: "bg-green-500", label: "Essentiel", maxEvents: 20 },
-    PRO: { color: "bg-purple-500", label: "Pro", maxEvents: null },
-    PREMIUM: { color: "bg-amber-500", label: "Premium", maxEvents: null },
+    DECOUVERTE: { color: "bg-blue-500", label: "Découverte" },
+    ESSENTIEL: { color: "bg-green-500", label: "Essentiel" },
+    PRO: { color: "bg-purple-500", label: "Pro" },
+    PREMIUM: { color: "bg-amber-500", label: "Premium" },
   };
 
-  const currentPlan = stats?.plan.tier as keyof typeof planConfig || 'DECOUVERTE';
-  const planInfo = planConfig[currentPlan];
+  const planTier = (planData?.tier || 'DECOUVERTE') as keyof typeof planConfig;
+  const planInfo = planConfig[planTier];
+  const maxEvents = getLimit('events');
+  const maxParticipants = getLimit('participants');
+  const maxVehicles = getLimit('vehicles');
+  const currentEventCount = stats?.totalEvents || 0;
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -84,27 +92,60 @@ export default function CompanyDashboard() {
               <div className="flex items-center gap-3">
                 <div className={`h-3 w-3 rounded-full ${planInfo.color}`} />
                 <div>
-                  <p className="font-medium">Plan {planInfo.label}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {planInfo.maxEvents !== null
-                      ? `${stats?.totalEvents || 0}/${planInfo.maxEvents} événements utilisés`
-                      : 'Événements illimités'}
-                  </p>
+                  <p className="font-medium">Plan {planData?.name || planInfo.label}</p>
+                  <div className="flex gap-4 text-sm text-muted-foreground">
+                    <span>
+                      {maxEvents !== null
+                        ? `${currentEventCount}/${maxEvents} événements`
+                        : 'Événements illimités'}
+                    </span>
+                    <span>
+                      {maxParticipants !== null
+                        ? `Max ${maxParticipants} participants/événement`
+                        : 'Participants illimités'}
+                    </span>
+                  </div>
                 </div>
               </div>
-              {stats?.plan.status === 'quote_pending' && (
+              {planData?.quotePending && (
                 <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                  <AlertCircle className="w-3 h-3 mr-1" />
                   Devis en attente
                 </Badge>
               )}
-              <Link href="/billing">
-                <Button variant="outline" size="sm" data-testid="button-upgrade-plan">
-                  Gérer mon abonnement
+              <Link href="/plan-features">
+                <Button variant="outline" size="sm" data-testid="button-view-plan">
+                  Voir mon plan
                 </Button>
               </Link>
             </div>
           </CardContent>
         </Card>
+
+        {/* Limit Warning */}
+        {!canAddMore('events', currentEventCount) && (
+          <Card className="mb-6 border-orange-200 bg-orange-50 dark:bg-orange-950">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 mt-0.5" />
+                <div>
+                  <p className="font-medium text-orange-900 dark:text-orange-100">
+                    Limite d'événements atteinte
+                  </p>
+                  <p className="text-sm text-orange-700 dark:text-orange-300">
+                    Vous avez atteint la limite de {maxEvents} événement{maxEvents && maxEvents > 1 ? 's' : ''} de votre plan {planInfo.label}.
+                    Passez à un plan supérieur pour créer plus d'événements.
+                  </p>
+                  <Link href="/billing">
+                    <Button size="sm" className="mt-3" data-testid="button-upgrade-from-warning">
+                      Améliorer mon plan
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -174,12 +215,14 @@ export default function CompanyDashboard() {
               <CardDescription>Gérez vos événements et participants</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Link href="/events/new">
-                <Button className="w-full justify-start" data-testid="button-create-event">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Créer un événement
-                </Button>
-              </Link>
+              <LimitGate resourceType="events" currentCount={currentEventCount}>
+                <Link href="/events/new">
+                  <Button className="w-full justify-start" data-testid="button-create-event">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Créer un événement
+                  </Button>
+                </Link>
+              </LimitGate>
               <Link href="/events">
                 <Button variant="outline" className="w-full justify-start" data-testid="button-view-events">
                   <Calendar className="mr-2 h-4 w-4" />
