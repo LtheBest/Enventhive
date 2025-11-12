@@ -3,6 +3,7 @@ import { db } from '../db';
 import { events, eventParents } from '@shared/schema';
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { requireAuth } from '../auth/middleware';
+import { checkEventLimit } from '../middleware/planLimits';
 import { createInsertSchema } from 'drizzle-zod';
 import { z } from 'zod';
 import { generateEventQRCode } from '../services/qrcode';
@@ -26,9 +27,9 @@ const updateEventSchema = createEventSchema.partial();
 
 /**
  * POST /api/events
- * Create a new event
+ * Create a new event (with plan limit check)
  */
-router.post('/', requireAuth, async (req: Request, res: Response) => {
+router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Response) => {
   try {
     const user = req.user!;
 
