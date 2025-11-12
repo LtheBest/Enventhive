@@ -6,52 +6,9 @@ import { eq, and, gt } from 'drizzle-orm';
 import { generateAccessToken, generateRefreshToken, verifyAccessToken } from '../auth/jwt';
 import { loginLimiter } from '../auth/rateLimiter';
 import { requireAuth } from '../auth/middleware';
+import { verifyCaptchaResponse } from '../utils/captcha';
 
 const router = Router();
-
-// Helper function to verify math captcha
-function verifyMathCaptcha(challenge: string, response: string): boolean {
-  if (!challenge || !response) {
-    return false;
-  }
-
-  try {
-    // Extract numbers and operator from challenge (e.g., "5+3")
-    const match = challenge.match(/^(\d+)([\+\-\*])(\d+)$/);
-    if (!match) {
-      return false;
-    }
-
-    const num1 = parseInt(match[1], 10);
-    const operator = match[2];
-    const num2 = parseInt(match[3], 10);
-    const userAnswer = parseInt(response, 10);
-
-    if (isNaN(num1) || isNaN(num2) || isNaN(userAnswer)) {
-      return false;
-    }
-
-    let correctAnswer: number;
-    switch (operator) {
-      case '+':
-        correctAnswer = num1 + num2;
-        break;
-      case '-':
-        correctAnswer = num1 - num2;
-        break;
-      case '*':
-        correctAnswer = num1 * num2;
-        break;
-      default:
-        return false;
-    }
-
-    return userAnswer === correctAnswer;
-  } catch (error) {
-    console.error('Captcha verification error:', error);
-    return false;
-  }
-}
 
 // Login endpoint
 router.post('/login', loginLimiter, async (req: Request, res: Response) => {
@@ -62,8 +19,9 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email et mot de passe requis' });
     }
 
-    // Verify captcha
-    if (!verifyMathCaptcha(captchaChallenge, captchaResponse)) {
+    // Verify captcha (now uses server-signed token)
+    // captchaChallenge is now the JWT token, captchaResponse is the user's answer
+    if (!verifyCaptchaResponse(captchaChallenge, captchaResponse)) {
       return res.status(400).json({ error: 'Vérification de sécurité échouée. Veuillez résoudre le calcul correctement.' });
     }
 

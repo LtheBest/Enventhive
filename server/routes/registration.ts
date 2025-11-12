@@ -11,52 +11,9 @@ import { withTransaction } from '../utils/transaction';
 import { validateSirenWithApi } from '../services/siren';
 import { searchFrenchAddresses, validateFrenchAddress } from '../services/address';
 import { createStripeCheckoutSession } from './stripe';
+import { verifyCaptchaResponse } from '../utils/captcha';
 
 const router = Router();
-
-// Helper function to verify math captcha
-function verifyMathCaptcha(challenge: string, response: string): boolean {
-  if (!challenge || !response) {
-    return false;
-  }
-
-  try {
-    // Extract numbers and operator from challenge (e.g., "5+3")
-    const match = challenge.match(/^(\d+)([\+\-\*])(\d+)$/);
-    if (!match) {
-      return false;
-    }
-
-    const num1 = parseInt(match[1], 10);
-    const operator = match[2];
-    const num2 = parseInt(match[3], 10);
-    const userAnswer = parseInt(response, 10);
-
-    if (isNaN(num1) || isNaN(num2) || isNaN(userAnswer)) {
-      return false;
-    }
-
-    let correctAnswer: number;
-    switch (operator) {
-      case '+':
-        correctAnswer = num1 + num2;
-        break;
-      case '-':
-        correctAnswer = num1 - num2;
-        break;
-      case '*':
-        correctAnswer = num1 * num2;
-        break;
-      default:
-        return false;
-    }
-
-    return userAnswer === correctAnswer;
-  } catch (error) {
-    console.error('Captcha verification error:', error);
-    return false;
-  }
-}
 
 // Registration schema matching frontend wizard structure
 const registrationSchema = z.object({
@@ -91,13 +48,14 @@ const registrationSchema = z.object({
 
 // Main registration endpoint
 // TODO: Re-enable registerLimiter after testing
-router.post('/register', /* registerLimiter, */ async (req: Request, res: Response) => {
+router.post('/register', registerLimiter, async (req: Request, res: Response) => {
   try {
     // Validate request body
     const validatedData = registrationSchema.parse(req.body);
 
-    // Verify captcha
-    if (!verifyMathCaptcha(validatedData.captchaChallenge, validatedData.captchaResponse)) {
+    // Verify server-signed CAPTCHA token
+    // captchaChallenge is now the JWT token, captchaResponse is the user's answer
+    if (!verifyCaptchaResponse(validatedData.captchaChallenge, validatedData.captchaResponse)) {
       return res.status(400).json({ error: 'Vérification de sécurité échouée. Veuillez résoudre le calcul correctement.' });
     }
 

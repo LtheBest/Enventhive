@@ -9,11 +9,15 @@ import eventRoutes from "./routes/events";
 import plansRoutes from "./routes/plans";
 import adminRoutes from "./routes/admin";
 import dashboardRoutes from "./routes/dashboard";
+import securityRoutes from "./routes/security";
 import { apiLimiter } from "./auth/rateLimiter";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply rate limiting to all API routes
   app.use('/api', apiLimiter);
+
+  // Security routes (CAPTCHA generation, etc.)
+  app.use('/api/security', securityRoutes);
 
   // Authentication routes
   app.use('/api/auth', authRoutes);
