@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { AppSidebar } from "@/components/AppSidebar";
 import { CookieBanner } from "@/components/CookieBanner";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { PlanFeaturesProvider } from "@/contexts/PlanFeaturesContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Home from "@/pages/Home";
 import CompanyDashboard from "@/pages/CompanyDashboard";
@@ -23,6 +24,7 @@ import Vehicles from "@/pages/Vehicles";
 import Stats from "@/pages/Stats";
 import Settings from "@/pages/Settings";
 import Billing from "@/pages/Billing";
+import PlanFeatures from "@/pages/PlanFeatures";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import AdminLogin from "@/pages/AdminLogin";
@@ -121,6 +123,13 @@ function Router() {
           </DashboardLayout>
         </ProtectedRoute>
       </Route>
+      <Route path="/plan-features">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <PlanFeatures />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
       
       {/* Admin routes */}
       <Route path="/admin">
@@ -169,11 +178,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <TooltipProvider>
-            <Router />
-            <Toaster />
-            <CookieBanner />
-          </TooltipProvider>
+          <PlanFeaturesProvider>
+            <TooltipProvider>
+              <Router />
+              <Toaster />
+              <CookieBanner />
+            </TooltipProvider>
+          </PlanFeaturesProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
