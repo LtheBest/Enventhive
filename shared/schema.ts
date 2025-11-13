@@ -88,6 +88,9 @@ export const plans = pgTable("plans", {
     hasWhiteLabel: boolean;
     hasDedicatedSupport: boolean;
     hasIntegrations: boolean;
+    hasBroadcastMessaging?: boolean;
+    hasAdvancedStats?: boolean;
+    hasPrioritySupport?: boolean;
   }>(),
   requiresQuote: boolean("requires_quote").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),

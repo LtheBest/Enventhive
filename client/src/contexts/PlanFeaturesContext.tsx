@@ -13,6 +13,9 @@ export interface PlanFeatures {
   hasWhiteLabel: boolean;
   hasDedicatedSupport: boolean;
   hasIntegrations: boolean;
+  hasBroadcastMessaging?: boolean;
+  hasAdvancedStats?: boolean;
+  hasPrioritySupport?: boolean;
 }
 
 interface PlanData {

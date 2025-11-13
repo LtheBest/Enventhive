@@ -30,6 +30,7 @@ import {
   Building2,
   Zap,
   Crown,
+  TrendingUp,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlanFeatures } from "@/contexts/PlanFeaturesContext";
@@ -40,11 +41,12 @@ interface MenuItem {
   url: string;
   icon: any;
   requiredPlan?: ('DECOUVERTE' | 'ESSENTIEL' | 'PRO' | 'PREMIUM')[];
+  requiredFeature?: string; // Nom de la feature dans planData.features
   badge?: string;
   badgeVariant?: 'default' | 'secondary' | 'destructive' | 'outline';
 }
 
-// Menu items de base (accessibles à tous)
+// Menu items de base (accessibles à tous les plans)
 const baseMenuItems: MenuItem[] = [
   {
     title: "Tableau de bord",
@@ -64,6 +66,7 @@ const baseMenuItems: MenuItem[] = [
 ];
 
 // Menu items conditionnels par plan
+// Véhicules et Statistiques sont masqués pour DÉCOUVERTE
 const conditionalMenuItems: MenuItem[] = [
   {
     title: "Véhicules",
@@ -79,13 +82,13 @@ const conditionalMenuItems: MenuItem[] = [
   },
 ];
 
-// Fonctionnalités avancées par plan
-const advancedFeatures: MenuItem[] = [
+// Fonctionnalités avancées par plan (ESSENTIEL+)
+const essentialFeatures: MenuItem[] = [
   {
     title: "Reporting avancé",
     url: "/reporting",
     icon: FileText,
-    requiredPlan: ['ESSENTIEL', 'PRO', 'PREMIUM'],
+    requiredFeature: 'hasAdvancedReporting',
     badge: "ESSENTIEL+",
     badgeVariant: 'secondary',
   },
@@ -93,7 +96,7 @@ const advancedFeatures: MenuItem[] = [
     title: "Notifications",
     url: "/notifications",
     icon: Bell,
-    requiredPlan: ['ESSENTIEL', 'PRO', 'PREMIUM'],
+    requiredFeature: 'hasNotifications',
     badge: "ESSENTIEL+",
     badgeVariant: 'secondary',
   },
@@ -101,23 +104,27 @@ const advancedFeatures: MenuItem[] = [
     title: "Messagerie diffusion",
     url: "/broadcast",
     icon: Send,
-    requiredPlan: ['ESSENTIEL', 'PRO', 'PREMIUM'],
+    requiredFeature: 'hasBroadcastMessaging',
     badge: "ESSENTIEL+",
     badgeVariant: 'secondary',
   },
+];
+
+// Fonctionnalités PRO+
+const proFeatures: MenuItem[] = [
   {
     title: "CRM",
     url: "/crm",
     icon: Building2,
-    requiredPlan: ['PRO', 'PREMIUM'],
+    requiredFeature: 'hasCRM',
     badge: "PRO+",
     badgeVariant: 'default',
   },
   {
     title: "Stats avancées",
     url: "/advanced-stats",
-    icon: BarChart3,
-    requiredPlan: ['PRO', 'PREMIUM'],
+    icon: TrendingUp,
+    requiredFeature: 'hasAdvancedStats',
     badge: "PRO+",
     badgeVariant: 'default',
   },
@@ -125,7 +132,7 @@ const advancedFeatures: MenuItem[] = [
     title: "Intégrations",
     url: "/integrations",
     icon: Zap,
-    requiredPlan: ['PRO', 'PREMIUM'],
+    requiredFeature: 'hasIntegrations',
     badge: "PRO+",
     badgeVariant: 'default',
   },
@@ -133,13 +140,13 @@ const advancedFeatures: MenuItem[] = [
     title: "Logo personnalisé",
     url: "/branding",
     icon: Crown,
-    requiredPlan: ['PRO', 'PREMIUM'],
+    requiredFeature: 'hasCustomLogo',
     badge: "PRO+",
     badgeVariant: 'default',
   },
 ];
 
-// Items toujours présents
+// Items toujours présents (tous les plans)
 const settingsItems: MenuItem[] = [
   {
     title: "Paramètres",
@@ -161,19 +168,35 @@ const settingsItems: MenuItem[] = [
 export function CompanySidebar() {
   const [location] = useLocation();
   const { user, company, logout } = useAuth();
-  const { planData } = usePlanFeatures();
+  const { planData, hasFeature } = usePlanFeatures();
 
-  // Détermine si un item de menu doit être affiché
+  // Détermine si un item de menu doit être affiché selon le plan
   const shouldShowMenuItem = (item: MenuItem): boolean => {
-    if (!item.requiredPlan) return true; // Items de base toujours affichés
-    if (!planData) return false;
-    return item.requiredPlan.includes(planData.tier);
+    // Si requiredPlan est défini, vérifier le plan
+    if (item.requiredPlan) {
+      if (!planData) return false;
+      if (!item.requiredPlan.includes(planData.tier)) return false;
+    }
+    
+    // Si requiredFeature est défini, vérifier la feature
+    if (item.requiredFeature) {
+      return hasFeature(item.requiredFeature as keyof typeof planData.features);
+    }
+    
+    return true;
   };
 
-  // Filtre les menus selon le plan
+  // Filtre les menus selon le plan et les features
   const visibleBaseItems = baseMenuItems;
   const visibleConditionalItems = conditionalMenuItems.filter(shouldShowMenuItem);
-  const visibleAdvancedFeatures = advancedFeatures.filter(shouldShowMenuItem);
+  const visibleEssentialFeatures = essentialFeatures.filter(shouldShowMenuItem);
+  const visibleProFeatures = proFeatures.filter(shouldShowMenuItem);
+
+  // Combine toutes les fonctionnalités avancées visibles
+  const allVisibleAdvancedFeatures = [
+    ...visibleEssentialFeatures,
+    ...visibleProFeatures,
+  ];
 
   const getPlanBadge = () => {
     if (!planData) return null;
@@ -237,12 +260,12 @@ export function CompanySidebar() {
         </SidebarGroup>
 
         {/* Fonctionnalités avancées (si disponibles pour le plan) */}
-        {visibleAdvancedFeatures.length > 0 && (
+        {allVisibleAdvancedFeatures.length > 0 && (
           <SidebarGroup>
             <SidebarGroupLabel>Fonctionnalités avancées</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {visibleAdvancedFeatures.map((item) => (
+                {allVisibleAdvancedFeatures.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild
@@ -266,7 +289,7 @@ export function CompanySidebar() {
           </SidebarGroup>
         )}
 
-        {/* Paramètres et Support */}
+        {/* Paramètres et Support (toujours visibles) */}
         <SidebarGroup>
           <SidebarGroupLabel>Paramètres</SidebarGroupLabel>
           <SidebarGroupContent>
