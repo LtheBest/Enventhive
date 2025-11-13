@@ -28,6 +28,13 @@ import Settings from "@/pages/Settings";
 import Billing from "@/pages/Billing";
 import PlanFeatures from "@/pages/PlanFeatures";
 import Support from "@/pages/Support";
+import Reporting from "@/pages/Reporting";
+import Notifications from "@/pages/Notifications";
+import Broadcast from "@/pages/Broadcast";
+import CRM from "@/pages/CRM";
+import AdvancedStats from "@/pages/AdvancedStats";
+import Integrations from "@/pages/Integrations";
+import Branding from "@/pages/Branding";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import AdminLogin from "@/pages/AdminLogin";
@@ -137,6 +144,55 @@ function Router() {
         <ProtectedRoute requiredRole="company">
           <DashboardLayout>
             <Support />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/reporting">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <Reporting />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/notifications">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <Notifications />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/broadcast">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <Broadcast />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/crm">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <CRM />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/advanced-stats">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <AdvancedStats />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/integrations">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <Integrations />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/branding">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <Branding />
           </DashboardLayout>
         </ProtectedRoute>
       </Route>

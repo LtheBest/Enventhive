@@ -17,13 +17,13 @@ async function seed() {
       {
         tier: 'DECOUVERTE',
         name: 'Découverte',
-        description: 'Plan gratuit pour découvrir TEAMMOVE',
+        description: 'Plan gratuit pour découvrir TEAMMOVE - Max 2 événements, 10 participants par événement',
         monthlyPrice: '0',
         annualPrice: '0',
         features: {
-          maxEvents: 5,
-          maxParticipants: 50,
-          maxVehicles: 10,
+          maxEvents: 2,
+          maxParticipants: 10,
+          maxVehicles: 0, // Pas de véhicules pour DECOUVERTE
           hasAdvancedReporting: false,
           hasNotifications: false,
           hasCRM: false,
@@ -39,12 +39,12 @@ async function seed() {
       {
         tier: 'ESSENTIEL',
         name: 'Essentiel',
-        description: 'Pour les entreprises qui grandissent',
+        description: 'Pour les entreprises qui grandissent - Reporting avancé, notifications, messagerie participants',
         monthlyPrice: '49.00',
         annualPrice: '490.00',
         features: {
-          maxEvents: null,
-          maxParticipants: null,
+          maxEvents: null, // Illimité
+          maxParticipants: 500,
           maxVehicles: 50,
           hasAdvancedReporting: true,
           hasNotifications: true,
@@ -61,13 +61,13 @@ async function seed() {
       {
         tier: 'PRO',
         name: 'Pro',
-        description: 'Solution complète pour les professionnels',
+        description: 'Solution complète pour les professionnels - CRM, stats avancées, logo personnalisé',
         monthlyPrice: '199.00',
         annualPrice: '1990.00',
         features: {
-          maxEvents: null,
-          maxParticipants: null,
-          maxVehicles: null,
+          maxEvents: null, // Illimité
+          maxParticipants: 5000,
+          maxVehicles: 100,
           hasAdvancedReporting: true,
           hasNotifications: true,
           hasCRM: true,
@@ -83,13 +83,13 @@ async function seed() {
       {
         tier: 'PREMIUM',
         name: 'Premium',
-        description: 'Solution sur-mesure avec marque blanche',
+        description: 'Solution sur-mesure avec marque blanche - Véhicules illimités, 10000+ participants',
         monthlyPrice: '499.00',
         annualPrice: '4990.00',
         features: {
-          maxEvents: null,
-          maxParticipants: null,
-          maxVehicles: null,
+          maxEvents: null, // Illimité
+          maxParticipants: null, // 10000+ (illimité)
+          maxVehicles: null, // Illimité
           hasAdvancedReporting: true,
           hasNotifications: true,
           hasCRM: true,
