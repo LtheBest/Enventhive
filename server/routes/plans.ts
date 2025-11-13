@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { db } from '../db';
-import { plans, companyPlanState } from '../../shared/schema';
+import { plans, companyPlanState, planHistory, supportRequests, companies } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 import { requireAuth, requireCompany } from '../auth/middleware';
+import { z } from 'zod';
+import { createStripeCheckoutSession } from './stripe';
+import { withTransaction } from '../utils/transaction';
 
 const router = Router();
 
@@ -83,6 +86,175 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching plan:', error);
     res.status(500).json({ error: 'Failed to fetch plan' });
+  }
+});
+
+/**
+ * POST /api/plans/upgrade
+ * Upgrade or change company plan
+ * Handles different flows:
+ * - DECOUVERTE (free): Instant activation
+ * - ESSENTIEL (paid): Redirect to Stripe checkout
+ * - PRO/PREMIUM (quote): Create support request
+ */
+const upgradePlanSchema = z.object({
+  targetPlanId: z.string().uuid('Plan ID invalide'),
+  billingCycle: z.enum(['monthly', 'annual']).default('monthly'),
+});
+
+router.post('/upgrade', requireAuth, requireCompany, async (req, res) => {
+  try {
+    const validatedData = upgradePlanSchema.parse(req.body);
+    const userId = req.user!.userId;
+    const companyId = req.user!.companyId;
+
+    // Get target plan
+    const [targetPlan] = await db
+      .select()
+      .from(plans)
+      .where(eq(plans.id, validatedData.targetPlanId))
+      .limit(1);
+
+    if (!targetPlan) {
+      return res.status(404).json({ error: 'Plan cible non trouvé' });
+    }
+
+    // Get current plan
+    const [currentPlanState] = await db
+      .select({
+        planId: companyPlanState.planId,
+        tier: plans.tier,
+      })
+      .from(companyPlanState)
+      .innerJoin(plans, eq(companyPlanState.planId, plans.id))
+      .where(eq(companyPlanState.companyId, companyId))
+      .limit(1);
+
+    if (!currentPlanState) {
+      return res.status(404).json({ error: 'Plan actuel non trouvé' });
+    }
+
+    // Prevent downgrading to DECOUVERTE (use separate endpoint for that)
+    if (targetPlan.tier === 'DECOUVERTE' && currentPlanState.tier !== 'DECOUVERTE') {
+      return res.status(400).json({ 
+        error: 'Le downgrade vers DECOUVERTE n\'est pas disponible. Contactez le support.' 
+      });
+    }
+
+    // Get company info
+    const [company] = await db
+      .select()
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1);
+
+    if (!company) {
+      return res.status(404).json({ error: 'Entreprise non trouvée' });
+    }
+
+    // Handle different plan types
+    if (targetPlan.tier === 'DECOUVERTE') {
+      // Free plan - instant activation (should rarely happen in upgrade flow)
+      await withTransaction(async (tx) => {
+        // Update plan state
+        await tx
+          .update(companyPlanState)
+          .set({
+            planId: targetPlan.id,
+            quotePending: false,
+            updatedAt: new Date(),
+          })
+          .where(eq(companyPlanState.companyId, companyId));
+
+        // Log plan history
+        await tx.insert(planHistory).values({
+          companyId,
+          oldPlanId: currentPlanState.planId,
+          newPlanId: targetPlan.id,
+          reason: 'Company initiated plan change to DECOUVERTE',
+          changedByUserId: userId,
+        });
+      });
+
+      return res.json({
+        success: true,
+        message: 'Plan changé avec succès',
+        requiresPayment: false,
+        requiresQuote: false,
+        newPlan: {
+          id: targetPlan.id,
+          name: targetPlan.name,
+          tier: targetPlan.tier,
+        },
+      });
+    } else if (targetPlan.requiresQuote) {
+      // PRO or PREMIUM - requires quote and admin approval
+      // Create support request
+      const [supportRequest] = await db.insert(supportRequests).values({
+        companyId,
+        userId,
+        requestType: 'plan_upgrade',
+        subject: `Demande d'upgrade vers ${targetPlan.name}`,
+        status: 'open',
+        priority: 'normal',
+        requestedPlanId: targetPlan.id,
+      }).returning();
+
+      return res.json({
+        success: true,
+        message: 'Demande d\'upgrade créée. Un administrateur va vous contacter.',
+        requiresPayment: false,
+        requiresQuote: true,
+        supportRequestId: supportRequest.id,
+        requestedPlan: {
+          id: targetPlan.id,
+          name: targetPlan.name,
+          tier: targetPlan.tier,
+        },
+      });
+    } else {
+      // ESSENTIEL - requires payment via Stripe
+      // Create Stripe checkout session
+      const stripeSession = await createStripeCheckoutSession({
+        company: {
+          id: company.id,
+          email: company.email,
+          name: company.name,
+        },
+        plan: {
+          id: targetPlan.id,
+          name: targetPlan.name,
+          monthlyPrice: targetPlan.monthlyPrice,
+          annualPrice: targetPlan.annualPrice,
+        },
+        billingCycle: validatedData.billingCycle,
+        userId,
+        isRegistration: false, // This is an upgrade, not initial registration
+      });
+
+      return res.json({
+        success: true,
+        message: 'Redirection vers le paiement',
+        requiresPayment: true,
+        requiresQuote: false,
+        stripeCheckoutUrl: stripeSession.url,
+        stripeSessionId: stripeSession.id,
+        requestedPlan: {
+          id: targetPlan.id,
+          name: targetPlan.name,
+          tier: targetPlan.tier,
+        },
+      });
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ 
+        error: 'Données invalides', 
+        details: error.errors 
+      });
+    }
+    console.error('Plan upgrade error:', error);
+    res.status(500).json({ error: 'Erreur lors du changement de plan' });
   }
 });
 

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db';
-import { events, participants, vehicles, companyPlanState, plans } from '../../shared/schema';
+import { events, participants, vehicles, companyPlanState, plans, companies } from '../../shared/schema';
 import { eq, sql } from 'drizzle-orm';
 import { requireAuth, requireCompany } from '../auth/middleware';
 
@@ -13,6 +13,25 @@ const router = Router();
 router.get('/stats', requireAuth, requireCompany, async (req, res) => {
   try {
     const companyId = req.user!.companyId;
+
+    // Get company information including name and SIREN
+    const [company] = await db
+      .select({
+        id: companies.id,
+        name: companies.name,
+        siren: companies.siren,
+        email: companies.email,
+        phone: companies.phone,
+        city: companies.city,
+        organizationType: companies.organizationType,
+      })
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1);
+
+    if (!company) {
+      return res.status(404).json({ error: 'Entreprise non trouvée' });
+    }
 
     // Get company events
     const companyEvents = await db
@@ -83,6 +102,17 @@ router.get('/stats', requireAuth, requireCompany, async (req, res) => {
     const planStatus = planState?.quotePending ? 'quote_pending' : 'active';
 
     res.json({
+      // Company information
+      company: {
+        id: company.id,
+        name: company.name,
+        siren: company.siren,
+        email: company.email,
+        phone: company.phone,
+        city: company.city,
+        organizationType: company.organizationType,
+      },
+      // Stats
       totalEvents: companyEvents.length,
       upcomingEvents: upcomingEvents.length,
       totalParticipants,
