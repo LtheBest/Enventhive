@@ -122,19 +122,19 @@ const advancedFeatures: MenuItem[] = [
     badgeVariant: 'default',
   },
   {
-    title: "Intégrations",
-    url: "/integrations",
-    icon: Zap,
-    requiredPlan: ['PRO', 'PREMIUM'],
-    badge: "PRO+",
-    badgeVariant: 'default',
-  },
-  {
     title: "Logo personnalisé",
     url: "/branding",
     icon: Crown,
     requiredPlan: ['PRO', 'PREMIUM'],
     badge: "PRO+",
+    badgeVariant: 'default',
+  },
+  {
+    title: "Intégrations",
+    url: "/integrations",
+    icon: Zap,
+    requiredPlan: ['PREMIUM'],
+    badge: "PREMIUM",
     badgeVariant: 'default',
   },
 ];
