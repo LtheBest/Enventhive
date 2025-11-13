@@ -29,15 +29,19 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+  // First ensure user is authenticated
+  requireAuth(req, res, () => {
+    // Then check if user has admin role
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
 
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
 
-  next();
+    next();
+  });
 }
 
 export function requireCompany(req: Request, res: Response, next: NextFunction) {
