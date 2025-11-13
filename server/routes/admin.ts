@@ -101,6 +101,8 @@ router.get('/companies', async (req: Request, res: Response) => {
         siren: companies.siren,
         email: companies.email,
         phone: companies.phone,
+        city: companies.city,
+        isActive: companies.isActive,
         createdAt: companies.createdAt,
         planTier: plans.tier,
         planName: plans.name,
@@ -824,6 +826,123 @@ router.delete('/company/:id', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Delete company error:', error);
     res.status(500).json({ error: 'Failed to delete company' });
+  }
+});
+
+/**
+ * GET /api/admin/profile
+ * Get current admin's profile information
+ */
+router.get('/profile', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+
+    const [admin] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        photoUrl: users.photoUrl,
+        role: users.role,
+        isActive: users.isActive,
+        lastLoginAt: users.lastLoginAt,
+        createdAt: users.createdAt
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    res.json({ admin });
+  } catch (error: any) {
+    console.error('Get admin profile error:', error);
+    res.status(500).json({ error: 'Failed to fetch admin profile' });
+  }
+});
+
+/**
+ * PUT /api/admin/profile
+ * Update current admin's profile information
+ */
+const updateProfileSchema = z.object({
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(8).optional()
+});
+
+router.put('/profile', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id;
+    const { firstName, lastName, email, currentPassword, newPassword } = updateProfileSchema.parse(req.body);
+
+    // Get current admin data
+    const [admin] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      updatedAt: new Date()
+    };
+
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (lastName !== undefined) updateData.lastName = lastName;
+    if (email !== undefined) {
+      // Check if email is already taken
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(and(eq(users.email, email), sql`${users.id} != ${userId}`))
+        .limit(1);
+
+      if (existingUser.length > 0) {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
+      updateData.email = email;
+    }
+
+    // Handle password change
+    if (newPassword && currentPassword) {
+      const bcrypt = await import('bcrypt');
+      const isValid = await bcrypt.compare(currentPassword, admin.passwordHash);
+      
+      if (!isValid) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      updateData.passwordHash = await bcrypt.hash(newPassword, 10);
+    } else if (newPassword || currentPassword) {
+      return res.status(400).json({ error: 'Both current and new password are required to change password' });
+    }
+
+    // Update admin profile
+    await db
+      .update(users)
+      .set(updateData)
+      .where(eq(users.id, userId));
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully'
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid request', details: error.errors });
+    }
+    console.error('Update admin profile error:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
   }
 });
 
