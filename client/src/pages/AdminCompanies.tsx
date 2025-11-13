@@ -55,7 +55,7 @@ export default function AdminCompanies() {
     queryFn: async () => {
       const response = await fetch('/api/admin/companies', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
         credentials: 'include',
       });
@@ -80,7 +80,7 @@ export default function AdminCompanies() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
         body: JSON.stringify({ companyId, isActive }),
         credentials: 'include',
@@ -115,7 +115,7 @@ export default function AdminCompanies() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
         body: JSON.stringify({
           companyIds: selectedCompanies,
@@ -154,7 +154,7 @@ export default function AdminCompanies() {
       const response = await fetch(`/api/admin/company/${companyId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
         credentials: 'include',
       });
@@ -187,7 +187,7 @@ export default function AdminCompanies() {
     try {
       const response = await fetch('/api/admin/export/companies', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
         credentials: 'include',
       });
