@@ -614,6 +614,146 @@ L'équipe TEAMMOVE`,
   return sendEmail(msg);
 }
 
+interface SupportNotificationEmailData {
+  supportRequestId: string;
+  companyName: string;
+  subject: string;
+  message: string;
+  requestType: string;
+  isReply?: boolean;
+  senderType?: 'admin' | 'company';
+  recipientEmail?: string;
+}
+
+export async function sendSupportNotificationEmail(data: SupportNotificationEmailData): Promise<boolean> {
+  const { supportRequestId, companyName, subject, message, requestType, isReply, senderType, recipientEmail } = data;
+
+  // Determine recipient based on sender type
+  const to = isReply 
+    ? (senderType === 'admin' ? recipientEmail : FROM_EMAIL) // If admin replies, send to company, else send to admin
+    : FROM_EMAIL; // New requests always go to admin
+
+  const isNewRequest = !isReply;
+  const requestTypeLabels: Record<string, string> = {
+    quote_request: 'Demande de devis',
+    plan_upgrade: 'Upgrade de plan',
+    technical_support: 'Support technique',
+    general_inquiry: 'Question générale',
+  };
+
+  const requestTypeLabel = requestTypeLabels[requestType] || requestType;
+
+  const msg: sgMail.MailDataRequired = {
+    to: to!,
+    from: FROM_EMAIL,
+    subject: isNewRequest 
+      ? `[Support] Nouvelle demande : ${subject}` 
+      : `[Support] Nouveau message : ${subject}`,
+    text: isNewRequest ? `
+Nouvelle demande de support reçue
+
+Entreprise : ${companyName}
+Type : ${requestTypeLabel}
+Sujet : ${subject}
+
+Message :
+${message}
+
+Accéder à la demande : ${BASE_URL}/admin/support/${supportRequestId}
+
+---
+TEAMMOVE Support System
+    ` : `
+Nouveau message sur la demande de support
+
+${senderType === 'admin' ? 'Réponse de l\'administrateur' : `Message de ${companyName}`}
+Sujet : ${subject}
+
+Message :
+${message}
+
+Accéder à la conversation : ${BASE_URL}/${senderType === 'admin' ? 'support' : 'admin/support'}/${supportRequestId}
+
+---
+TEAMMOVE Support System
+    `,
+    html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: ${isNewRequest ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'}; color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+    .button { display: inline-block; padding: 12px 30px; background: #8b5cf6; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+    .info-box { background: white; padding: 20px; border-left: 4px solid #8b5cf6; margin: 20px 0; border-radius: 5px; }
+    .message-box { background: #f0f9ff; padding: 15px; border-radius: 5px; margin: 15px 0; }
+    .badge { display: inline-block; padding: 5px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; background: #ddd6fe; color: #6d28d9; }
+    .footer { text-align: center; margin-top: 30px; color: #777; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>${isNewRequest ? '📩 Nouvelle demande de support' : '💬 Nouveau message'}</h1>
+    </div>
+    <div class="content">
+      ${isNewRequest ? `
+        <p><strong>Une nouvelle demande de support a été reçue.</strong></p>
+        
+        <div class="info-box">
+          <p><strong>🏢 Entreprise :</strong> ${companyName}</p>
+          <p><strong>📋 Type :</strong> <span class="badge">${requestTypeLabel}</span></p>
+          <p><strong>✉️ Sujet :</strong> ${subject}</p>
+        </div>
+        
+        <div class="message-box">
+          <p><strong>Message :</strong></p>
+          <p>${message.replace(/\n/g, '<br>')}</p>
+        </div>
+        
+        <div style="text-align: center;">
+          <a href="${BASE_URL}/admin/support/${supportRequestId}" class="button">Accéder à la demande</a>
+        </div>
+      ` : `
+        <p><strong>${senderType === 'admin' ? '👨‍💼 L\'administrateur a répondu' : `📧 ${companyName} a envoyé un message`}</strong></p>
+        
+        <div class="info-box">
+          <p><strong>✉️ Sujet :</strong> ${subject}</p>
+          <p><strong>📋 Type :</strong> <span class="badge">${requestTypeLabel}</span></p>
+        </div>
+        
+        <div class="message-box">
+          <p><strong>Nouveau message :</strong></p>
+          <p>${message.replace(/\n/g, '<br>')}</p>
+        </div>
+        
+        <div style="text-align: center;">
+          <a href="${BASE_URL}/${senderType === 'admin' ? 'support' : 'admin/support'}/${supportRequestId}" class="button">Voir la conversation</a>
+        </div>
+      `}
+      
+      <p style="margin-top: 30px; font-size: 14px; color: #777;">
+        ${isNewRequest 
+          ? 'Veuillez traiter cette demande dans les plus brefs délais.' 
+          : 'Connectez-vous pour continuer la conversation.'}
+      </p>
+    </div>
+    <div class="footer">
+      <p>© ${new Date().getFullYear()} TEAMMOVE Support System</p>
+      <p>Cet email est envoyé automatiquement par le système de support TEAMMOVE.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `,
+  };
+
+  return sendEmail(msg);
+}
+
 export default {
   sendWelcomeEmail,
   sendEventCreatedEmail,
@@ -621,4 +761,5 @@ export default {
   sendPaymentFailedEmail,
   sendEventReminderEmail,
   sendNoDriverAlertEmail,
+  sendSupportNotificationEmail,
 };

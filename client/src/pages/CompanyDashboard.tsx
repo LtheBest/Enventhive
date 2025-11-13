@@ -8,6 +8,15 @@ import { usePlanFeatures } from "@/contexts/PlanFeaturesContext";
 import { LimitGate } from "@/components/FeatureGate";
 
 interface DashboardStats {
+  company: {
+    id: string;
+    name: string;
+    siren: string;
+    email: string;
+    phone?: string;
+    city: string;
+    organizationType: string;
+  };
   totalEvents: number;
   upcomingEvents: number;
   totalParticipants: number;
@@ -64,8 +73,10 @@ export default function CompanyDashboard() {
                 <span className="text-primary-foreground font-bold">TM</span>
               </div>
               <div>
-                <h1 className="text-xl font-semibold">TEAMMOVE</h1>
-                <p className="text-sm text-muted-foreground">Dashboard Entreprise</p>
+                <h1 className="text-xl font-semibold">{stats?.company?.name || 'TEAMMOVE'}</h1>
+                <p className="text-sm text-muted-foreground">
+                  SIREN: {stats?.company?.siren || '-'} | {stats?.company?.city || 'Dashboard Entreprise'}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">

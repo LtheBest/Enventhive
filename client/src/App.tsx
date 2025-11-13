@@ -19,6 +19,7 @@ import AdminValidations from "@/pages/AdminValidations";
 import AdminStats from "@/pages/AdminStats";
 import AdminSettings from "@/pages/AdminSettings";
 import AdminMessages from "@/pages/AdminMessages";
+import AdminSupport from "@/pages/AdminSupport";
 import Events from "@/pages/Events";
 import Participants from "@/pages/Participants";
 import Vehicles from "@/pages/Vehicles";
@@ -26,6 +27,7 @@ import Stats from "@/pages/Stats";
 import Settings from "@/pages/Settings";
 import Billing from "@/pages/Billing";
 import PlanFeatures from "@/pages/PlanFeatures";
+import Support from "@/pages/Support";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import AdminLogin from "@/pages/AdminLogin";
@@ -131,6 +133,13 @@ function Router() {
           </DashboardLayout>
         </ProtectedRoute>
       </Route>
+      <Route path="/support">
+        <ProtectedRoute requiredRole="company">
+          <DashboardLayout>
+            <Support />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
       
       {/* Admin routes */}
       <Route path="/admin">
@@ -172,6 +181,13 @@ function Router() {
         <ProtectedRoute requiredRole="admin">
           <DashboardLayout>
             <AdminMessages />
+          </DashboardLayout>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/support">
+        <ProtectedRoute requiredRole="admin">
+          <DashboardLayout>
+            <AdminSupport />
           </DashboardLayout>
         </ProtectedRoute>
       </Route>

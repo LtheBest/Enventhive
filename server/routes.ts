@@ -11,6 +11,7 @@ import plansRoutes from "./routes/plans";
 import adminRoutes from "./routes/admin";
 import dashboardRoutes from "./routes/dashboard";
 import securityRoutes from "./routes/security";
+import supportRoutes from "./routes/support";
 import { apiLimiter } from "./auth/rateLimiter";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -47,6 +48,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Company dashboard routes
   app.use('/api/dashboard', dashboardRoutes);
+
+  // Support routes (for companies and admins)
+  app.use('/api/support', supportRoutes);
 
   const httpServer = createServer(app);
 

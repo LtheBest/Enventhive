@@ -420,3 +420,85 @@ export const insertMessageRecipientSchema = createInsertSchema(messageRecipients
 
 export type InsertAdminMessage = z.infer<typeof insertAdminMessageSchema>;
 export type InsertMessageRecipient = z.infer<typeof insertMessageRecipientSchema>;
+
+// Support Requests - for quote/plan upgrade requests
+export const supportRequestStatusEnum = pgEnum("support_request_status", ["open", "in_progress", "resolved", "closed"]);
+export const supportRequestTypeEnum = pgEnum("support_request_type", ["quote_request", "plan_upgrade", "technical_support", "general_inquiry"]);
+
+export const supportRequests = pgTable("support_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  requestType: supportRequestTypeEnum("request_type").notNull(),
+  status: supportRequestStatusEnum("status").default("open").notNull(),
+  requestedPlanId: varchar("requested_plan_id").references(() => plans.id),
+  subject: text("subject").notNull(),
+  priority: varchar("priority", { length: 20 }).default("normal").notNull(),
+  assignedToUserId: varchar("assigned_to_user_id").references(() => users.id, { onDelete: "set null" }),
+  resolvedAt: timestamp("resolved_at"),
+  closedAt: timestamp("closed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  companyIdx: index("support_requests_company_idx").on(table.companyId),
+  statusIdx: index("support_requests_status_idx").on(table.status),
+  typeIdx: index("support_requests_type_idx").on(table.requestType),
+  createdAtIdx: index("support_requests_created_at_idx").on(table.createdAt),
+}));
+
+// Support Messages - bidirectional messages between company and admin
+export const supportMessages = pgTable("support_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  supportRequestId: varchar("support_request_id").references(() => supportRequests.id, { onDelete: "cascade" }).notNull(),
+  senderId: varchar("sender_id").references(() => users.id, { onDelete: "set null" }).notNull(),
+  senderType: userRoleEnum("sender_type").notNull(), // admin or company
+  content: text("content").notNull(),
+  isInternal: boolean("is_internal").default(false).notNull(), // true for admin-only notes
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  requestIdx: index("support_messages_request_idx").on(table.supportRequestId),
+  senderIdx: index("support_messages_sender_idx").on(table.senderId),
+  createdAtIdx: index("support_messages_created_at_idx").on(table.createdAt),
+}));
+
+export const insertSupportRequestSchema = createInsertSchema(supportRequests).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertSupportMessageSchema = createInsertSchema(supportMessages).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export type SupportRequest = typeof supportRequests.$inferSelect;
+export type InsertSupportRequest = z.infer<typeof insertSupportRequestSchema>;
+export type SupportMessage = typeof supportMessages.$inferSelect;
+export type InsertSupportMessage = z.infer<typeof insertSupportMessageSchema>;
+
+// Invitation Tokens - for email invitations to participants
+export const invitationTokens = pgTable("invitation_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(),
+  participantId: varchar("participant_id").references(() => participants.id, { onDelete: "cascade" }).notNull(),
+  eventId: varchar("event_id").references(() => events.id, { onDelete: "cascade" }).notNull(),
+  companyId: varchar("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  usedAt: timestamp("used_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("invitation_tokens_token_idx").on(table.token),
+  participantIdx: index("invitation_tokens_participant_idx").on(table.participantId),
+  eventIdx: index("invitation_tokens_event_idx").on(table.eventId),
+  expiresAtIdx: index("invitation_tokens_expires_at_idx").on(table.expiresAt),
+}));
+
+export const insertInvitationTokenSchema = createInsertSchema(invitationTokens).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export type InvitationToken = typeof invitationTokens.$inferSelect;
+export type InsertInvitationToken = z.infer<typeof insertInvitationTokenSchema>;
