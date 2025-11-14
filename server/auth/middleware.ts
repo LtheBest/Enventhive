@@ -45,19 +45,23 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
 }
 
 export function requireCompany(req: Request, res: Response, next: NextFunction) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+  // First ensure user is authenticated
+  requireAuth(req, res, () => {
+    // Then check if user has company role
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
 
-  if (req.user.role !== 'company') {
-    return res.status(403).json({ error: 'Company access required' });
-  }
+    if (req.user.role !== 'company') {
+      return res.status(403).json({ error: 'Company access required' });
+    }
 
-  if (!req.user.companyId) {
-    return res.status(403).json({ error: 'No company associated with user' });
-  }
+    if (!req.user.companyId) {
+      return res.status(403).json({ error: 'No company associated with user' });
+    }
 
-  next();
+    next();
+  });
 }
 
 // Optional auth - sets user if token is valid but doesn't require it

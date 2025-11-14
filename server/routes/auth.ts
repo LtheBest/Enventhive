@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { db } from '../db';
-import { users, refreshTokens } from '@shared/schema';
+import { users, refreshTokens, companies, companyPlanState, plans } from '@shared/schema';
 import { eq, and, gt } from 'drizzle-orm';
 import { generateAccessToken, generateRefreshToken, verifyAccessToken } from '../auth/jwt';
 import { loginLimiter } from '../auth/rateLimiter';
@@ -219,7 +219,59 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Utilisateur non trouvé' });
     }
 
-    return res.json({ user });
+    // Fetch company and plan data if user is associated with a company
+    let companyData = null;
+    let planData = null;
+
+    if (user.companyId && user.role === 'company') {
+      // Get company info
+      const [company] = await db
+        .select({
+          id: companies.id,
+          name: companies.name,
+          siren: companies.siren,
+          address: companies.address,
+          city: companies.city,
+          postalCode: companies.postalCode,
+        })
+        .from(companies)
+        .where(eq(companies.id, user.companyId))
+        .limit(1);
+      
+      if (company) {
+        companyData = company;
+
+        // Get plan info
+        const [planInfo] = await db
+          .select({
+            id: plans.id,
+            name: plans.name,
+            tier: plans.tier,
+            monthlyPrice: plans.monthlyPrice,
+            billingCycle: companyPlanState.billingCycle,
+          })
+          .from(companyPlanState)
+          .innerJoin(plans, eq(companyPlanState.planId, plans.id))
+          .where(eq(companyPlanState.companyId, user.companyId))
+          .limit(1);
+
+        if (planInfo) {
+          planData = {
+            id: planInfo.id,
+            name: planInfo.name,
+            tier: planInfo.tier,
+            price: planInfo.monthlyPrice,
+            billingCycle: planInfo.billingCycle || 'monthly',
+          };
+        }
+      }
+    }
+
+    return res.json({ 
+      user,
+      company: companyData,
+      plan: planData,
+    });
   } catch (error) {
     console.error('Get user error:', error);
     return res.status(500).json({ error: 'Erreur lors de la récupération de l\'utilisateur' });

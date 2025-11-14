@@ -265,27 +265,27 @@ export function getPlanLimits(planTier: PlanTier): PlanLimits {
   switch (planTier) {
     case "DECOUVERTE":
       return {
-        maxEvents: 2, // Maximum 2 événements
-        maxParticipants: 10, // Maximum 10 participants
+        maxEvents: 2, // Maximum 2 événements par an
+        maxParticipants: 20, // Maximum 20 participants par événement
         maxVehicles: 0, // Pas de véhicules
       };
     case "ESSENTIEL":
       return {
         maxEvents: null, // Illimité
-        maxParticipants: 500,
-        maxVehicles: 50,
+        maxParticipants: 500, // Maximum 500 participants
+        maxVehicles: 50, // Maximum 50 véhicules
       };
     case "PRO":
       return {
-        maxEvents: null,
-        maxParticipants: 5000,
-        maxVehicles: 100,
+        maxEvents: null, // Illimité
+        maxParticipants: 5000, // Maximum 5000 participants
+        maxVehicles: 100, // Maximum 100 véhicules
       };
     case "PREMIUM":
       return {
-        maxEvents: null,
-        maxParticipants: 10000,
-        maxVehicles: null, // Illimité
+        maxEvents: null, // Illimité
+        maxParticipants: 10000, // Maximum 10000+ participants
+        maxVehicles: null, // Véhicules illimités
       };
     default:
       return {
