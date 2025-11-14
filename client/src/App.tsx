@@ -6,11 +6,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { AppSidebar } from "@/components/AppSidebar";
+import { DynamicSidebar } from "@/components/DynamicSidebar";
 import { CookieBanner } from "@/components/CookieBanner";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { PlanFeaturesProvider } from "@/contexts/PlanFeaturesContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { usePlanUpdateListener, usePlanPolling } from "@/hooks/use-plan-update-listener";
 import Home from "@/pages/Home";
 import CompanyDashboard from "@/pages/CompanyDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
@@ -44,6 +45,11 @@ import NotFound from "@/pages/not-found";
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, company, plan } = useAuth();
+  
+  // Écouter les changements de plan en temps réel
+  usePlanUpdateListener();
+  usePlanPolling(60000); // Poll every 60 seconds
+  
   const style = {
     "--sidebar-width": "20rem",
     "--sidebar-width-icon": "4rem",
@@ -52,9 +58,8 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
-        <AppSidebar
+        <DynamicSidebar
           userRole={(user?.role as "company" | "admin") || "company"}
-          currentPlan={plan?.tier || "DECOUVERTE"}
           companyName={company?.name || ""}
           userName={user?.email || ""}
         />
