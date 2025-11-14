@@ -76,7 +76,7 @@ async function updatePlans() {
         description: 'Solution sur-mesure avec marque blanche - Véhicules illimités, 10000+ participants',
         features: {
           maxEvents: null,
-          maxParticipants: null,
+          maxParticipants: 10000,
           maxVehicles: null,
           hasAdvancedReporting: true,
           hasNotifications: true,
