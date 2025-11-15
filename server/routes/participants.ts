@@ -477,4 +477,84 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/participants
+ * List all participants for company's events
+ * Optional query params: eventId, role, status
+ */
+router.get('/', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = req.user!;
+
+    if (!user.companyId) {
+      return res.status(403).json({ error: 'Utilisateur non associé à une entreprise' });
+    }
+
+    const { eventId, role, status } = req.query;
+
+    // Build query to get participants from company's events
+    let query = db
+      .select({
+        participant: participants,
+        event: {
+          id: events.id,
+          title: events.title,
+          startDate: events.startDate,
+          location: events.location,
+          city: events.city,
+        },
+      })
+      .from(participants)
+      .innerJoin(events, eq(participants.eventId, events.id))
+      .where(eq(events.companyId, user.companyId));
+
+    // Build conditions array for filtering
+    const conditions = [eq(events.companyId, user.companyId)];
+
+    // Filter by event if specified
+    if (eventId && typeof eventId === 'string') {
+      conditions.push(eq(participants.eventId, eventId));
+    }
+
+    // Filter by role if specified
+    if (role && (role === 'driver' || role === 'passenger')) {
+      conditions.push(eq(participants.role, role));
+    }
+
+    // Filter by status if specified
+    if (status && typeof status === 'string') {
+      conditions.push(eq(participants.status, status as any));
+    }
+
+    // Apply filters
+    if (conditions.length > 1) {
+      query = db
+        .select({
+          participant: participants,
+          event: {
+            id: events.id,
+            title: events.title,
+            startDate: events.startDate,
+            location: events.location,
+            city: events.city,
+          },
+        })
+        .from(participants)
+        .innerJoin(events, eq(participants.eventId, events.id))
+        .where(and(...conditions));
+    }
+
+    const results = await query;
+
+    res.json({
+      success: true,
+      participants: results,
+      count: results.length,
+    });
+  } catch (error: any) {
+    console.error('Error listing participants:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de la récupération des participants' });
+  }
+});
+
 export default router;

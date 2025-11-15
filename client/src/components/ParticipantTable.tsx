@@ -19,6 +19,8 @@ interface Participant {
   role: "driver" | "passenger";
   seats?: number;
   status: "confirmed" | "pending" | "declined";
+  eventTitle?: string;
+  eventDate?: string;
 }
 
 interface ParticipantTableProps {
@@ -42,6 +44,7 @@ export function ParticipantTable({ participants, onSendEmail, onRemove }: Partic
             <TableHead>Participant</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Ville</TableHead>
+            <TableHead>Événement</TableHead>
             <TableHead>Rôle</TableHead>
             <TableHead>Statut</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -67,6 +70,16 @@ export function ParticipantTable({ participants, onSendEmail, onRemove }: Partic
                 </TableCell>
                 <TableCell className="text-sm" data-testid="text-participant-city">
                   {participant.city}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {participant.eventTitle && (
+                    <div>
+                      <div className="font-medium">{participant.eventTitle}</div>
+                      {participant.eventDate && (
+                        <div className="text-xs text-muted-foreground">{participant.eventDate}</div>
+                      )}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
