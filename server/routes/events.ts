@@ -69,6 +69,8 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
       return res.status(403).json({ error: 'Utilisateur non associé à une entreprise' });
     }
 
+    console.log('Creating event with body:', JSON.stringify(req.body, null, 2));
+
     // Validate request body
     const validatedData = createEventSchema.parse(req.body);
 
@@ -292,8 +294,10 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
     });
   } catch (error: any) {
     console.error('Error creating event:', error);
+    console.error('Error details:', JSON.stringify(error, null, 2));
     
     if (error.name === 'ZodError') {
+      console.error('Zod validation errors:', JSON.stringify(error.errors, null, 2));
       return res.status(400).json({ 
         error: 'Données invalides', 
         details: error.errors 
