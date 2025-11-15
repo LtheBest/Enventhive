@@ -3,65 +3,54 @@ import { EventCard } from "@/components/EventCard";
 import { CreateEventDialog } from "@/components/CreateEventDialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
-//todo: remove mock functionality
-const mockEvents = [
-  {
-    id: "1",
-    title: "Réunion d'équipe Q4",
-    date: "15 Décembre 2024, 14:00",
-    location: "Paris, 75001",
-    participants: 32,
-    maxParticipants: 50,
-    drivers: 8,
-    availableSeats: 12,
-    status: "upcoming" as const,
-  },
-  {
-    id: "2",
-    title: "Team Building Automne",
-    date: "20 Novembre 2024, 10:00",
-    location: "Lyon, 69001",
-    participants: 45,
-    maxParticipants: 60,
-    drivers: 10,
-    availableSeats: 5,
-    status: "ongoing" as const,
-  },
-  {
-    id: "3",
-    title: "Formation Sécurité",
-    date: "10 Octobre 2024, 09:00",
-    location: "Marseille, 13001",
-    participants: 28,
-    maxParticipants: 30,
-    drivers: 6,
-    availableSeats: 0,
-    status: "completed" as const,
-  },
-  {
-    id: "4",
-    title: "Conférence Annuelle",
-    date: "05 Janvier 2025, 09:00",
-    location: "Toulouse, 31000",
-    participants: 120,
-    maxParticipants: 150,
-    drivers: 25,
-    availableSeats: 30,
-    status: "upcoming" as const,
-  },
-];
+interface Event {
+  id: string;
+  title: string;
+  startDate: string;
+  location: string;
+  city: string;
+  description?: string;
+  maxParticipants?: number;
+  status: string;
+  qrCode?: string;
+  publicLink?: string;
+}
 
 export default function Events() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const filteredEvents = mockEvents.filter((event) => {
+  // Fetch events from API
+  const { data: eventsData, isLoading, error } = useQuery({
+    queryKey: ['events', statusFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") {
+        params.append('status', statusFilter);
+      }
+      
+      const response = await fetch(`/api/events?${params.toString()}`, {
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Erreur lors du chargement des événements');
+      }
+      
+      return response.json();
+    },
+  });
+
+  const events = eventsData?.events || [];
+
+  const filteredEvents = events.filter((event: Event) => {
     const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         event.location.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || event.status === statusFilter;
-    return matchesSearch && matchesStatus;
+                         event.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         event.city.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
   });
 
   return (
@@ -101,13 +90,22 @@ export default function Events() {
       </div>
 
       <div className="grid gap-4">
-        {filteredEvents.length > 0 ? (
-          filteredEvents.map((event) => (
-            <EventCard key={event.id} {...event} />
+        {isLoading ? (
+          <div className="text-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+            <p className="text-muted-foreground mt-4">Chargement des événements...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12 text-destructive">
+            Erreur lors du chargement des événements
+          </div>
+        ) : filteredEvents.length > 0 ? (
+          filteredEvents.map((event: Event) => (
+            <EventCard key={event.id} event={event} />
           ))
         ) : (
           <div className="text-center py-12 text-muted-foreground">
-            Aucun événement trouvé
+            {events.length === 0 ? "Aucun événement créé. Créez votre premier événement !" : "Aucun événement trouvé"}
           </div>
         )}
       </div>
