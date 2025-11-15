@@ -13,6 +13,8 @@ import adminRoutes from "./routes/admin";
 import dashboardRoutes from "./routes/dashboard";
 import securityRoutes from "./routes/security";
 import supportRoutes from "./routes/support";
+import companyVehiclesRoutes from "./routes/company-vehicles";
+import publicEventsRoutes from "./routes/public-events";
 import { apiLimiter } from "./auth/rateLimiter";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -37,6 +39,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Event management routes
   app.use('/api/events', eventRoutes);
+
+  // Public event routes (no authentication required)
+  app.use('/api/public/events', publicEventsRoutes);
 
   // Participant management routes
   app.use('/api/participants', participantRoutes);

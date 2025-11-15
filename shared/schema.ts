@@ -195,7 +195,34 @@ export const participants = pgTable("participants", {
   emailIdx: index("participants_email_idx").on(table.email),
 }));
 
-// Vehicles - linked to driver participants
+// Company Vehicles - vehicles owned by companies (added to events optionally)
+export const companyVehicles = pgTable("company_vehicles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(), // e.g., "Bus A", "Voiture 1"
+  vehicleType: text("vehicle_type").notNull(), // e.g., "bus", "car", "van"
+  licensePlate: varchar("license_plate", { length: 20 }),
+  totalSeats: integer("total_seats").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  companyIdx: index("company_vehicles_company_idx").on(table.companyId),
+}));
+
+// Event Vehicles - link company vehicles to specific events
+export const eventVehicles = pgTable("event_vehicles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").references(() => events.id, { onDelete: "cascade" }).notNull(),
+  companyVehicleId: varchar("company_vehicle_id").references(() => companyVehicles.id, { onDelete: "cascade" }).notNull(),
+  assignedDriverId: varchar("assigned_driver_id").references(() => participants.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventIdx: index("event_vehicles_event_idx").on(table.eventId),
+  vehicleIdx: index("event_vehicles_vehicle_idx").on(table.companyVehicleId),
+}));
+
+// Vehicles - linked to driver participants (for participant-created rides)
 export const vehicles = pgTable("vehicles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   eventId: varchar("event_id").references(() => events.id, { onDelete: "cascade" }).notNull(),
@@ -204,7 +231,11 @@ export const vehicles = pgTable("vehicles", {
   availableSeats: integer("available_seats").notNull(),
   departureLocation: text("departure_location").notNull(),
   departureCity: text("departure_city").notNull(),
+  departureTime: timestamp("departure_time").notNull(),
   destinationLocation: text("destination_location"),
+  isPaidRide: boolean("is_paid_ride").default(false).notNull(), // true if driver wants payment
+  pricePerKm: decimal("price_per_km", { precision: 5, scale: 2 }), // e.g., 0.10 EUR/km
+  estimatedDistance: decimal("estimated_distance", { precision: 8, scale: 2 }), // in km
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -339,6 +370,17 @@ export const insertParticipantSchema = createInsertSchema(participants, {
   email: z.string().email(),
 }).omit({ id: true, createdAt: true, invitedAt: true });
 
+export const insertCompanyVehicleSchema = createInsertSchema(companyVehicles).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+export const insertEventVehicleSchema = createInsertSchema(eventVehicles).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
 export const insertVehicleSchema = createInsertSchema(vehicles).omit({ 
   id: true, 
   createdAt: true, 
@@ -393,6 +435,12 @@ export type InsertEvent = z.infer<typeof insertEventSchema>;
 
 export type Participant = typeof participants.$inferSelect;
 export type InsertParticipant = z.infer<typeof insertParticipantSchema>;
+
+export type CompanyVehicle = typeof companyVehicles.$inferSelect;
+export type InsertCompanyVehicle = z.infer<typeof insertCompanyVehicleSchema>;
+
+export type EventVehicle = typeof eventVehicles.$inferSelect;
+export type InsertEventVehicle = z.infer<typeof insertEventVehicleSchema>;
 
 export type Vehicle = typeof vehicles.$inferSelect;
 export type InsertVehicle = z.infer<typeof insertVehicleSchema>;
@@ -495,10 +543,61 @@ export const invitationTokens = pgTable("invitation_tokens", {
   expiresAtIdx: index("invitation_tokens_expires_at_idx").on(table.expiresAt),
 }));
 
+// Passenger Ride Requests - passengers looking for rides
+export const passengerRideRequests = pgTable("passenger_ride_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  participantId: varchar("participant_id").references(() => participants.id, { onDelete: "cascade" }).notNull(),
+  eventId: varchar("event_id").references(() => events.id, { onDelete: "cascade" }).notNull(),
+  departureLocation: text("departure_location").notNull(),
+  departureCity: text("departure_city").notNull(),
+  matchedVehicleId: varchar("matched_vehicle_id").references(() => vehicles.id, { onDelete: "set null" }),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, matched, confirmed
+  notifiedDrivers: jsonb("notified_drivers").$type<string[]>().default([]), // IDs of drivers notified
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  participantIdx: index("passenger_ride_requests_participant_idx").on(table.participantId),
+  eventIdx: index("passenger_ride_requests_event_idx").on(table.eventId),
+  departureCityIdx: index("passenger_ride_requests_departure_city_idx").on(table.departureCity),
+  statusIdx: index("passenger_ride_requests_status_idx").on(table.status),
+}));
+
+// Vehicle Bookings - track passenger bookings on vehicles
+export const vehicleBookings = pgTable("vehicle_bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vehicleId: varchar("vehicle_id").references(() => vehicles.id, { onDelete: "cascade" }).notNull(),
+  passengerParticipantId: varchar("passenger_participant_id").references(() => participants.id, { onDelete: "cascade" }).notNull(),
+  rideRequestId: varchar("ride_request_id").references(() => passengerRideRequests.id, { onDelete: "set null" }),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, confirmed, cancelled
+  confirmedAt: timestamp("confirmed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  vehicleIdx: index("vehicle_bookings_vehicle_idx").on(table.vehicleId),
+  passengerIdx: index("vehicle_bookings_passenger_idx").on(table.passengerParticipantId),
+  statusIdx: index("vehicle_bookings_status_idx").on(table.status),
+}));
+
 export const insertInvitationTokenSchema = createInsertSchema(invitationTokens).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export const insertPassengerRideRequestSchema = createInsertSchema(passengerRideRequests).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true 
+});
+
+export const insertVehicleBookingSchema = createInsertSchema(vehicleBookings).omit({ 
   id: true, 
   createdAt: true 
 });
 
 export type InvitationToken = typeof invitationTokens.$inferSelect;
 export type InsertInvitationToken = z.infer<typeof insertInvitationTokenSchema>;
+
+export type PassengerRideRequest = typeof passengerRideRequests.$inferSelect;
+export type InsertPassengerRideRequest = z.infer<typeof insertPassengerRideRequestSchema>;
+
+export type VehicleBooking = typeof vehicleBookings.$inferSelect;
+export type InsertVehicleBooking = z.infer<typeof insertVehicleBookingSchema>;
