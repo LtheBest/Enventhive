@@ -24,10 +24,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Calendar, MapPin, Users, Download, Trash2, QrCode, Link as LinkIcon, Copy, Check, Edit, Eye } from "lucide-react";
+import { Calendar, MapPin, Users, Download, Trash2, QrCode, Link as LinkIcon, Copy, Check, Edit, Eye, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { EditEventDialog } from "@/components/EditEventDialog";
+import { InviteParticipantsDialog } from "@/components/InviteParticipantsDialog";
 
 interface Event {
   id: string;
@@ -56,7 +59,9 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 export function EventCard({ event }: EventCardProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -76,14 +81,11 @@ export function EventCard({ event }: EventCardProps) {
   // Delete event mutation
   const deleteEventMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/events/${event.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
+      const response = await apiRequest('DELETE', `/api/events/${event.id}`);
       
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Erreur lors de la suppression');
+        throw new Error(error.error || 'Erreur lors de la suppression');
       }
       
       return response.json();
@@ -93,6 +95,7 @@ export function EventCard({ event }: EventCardProps) {
         title: "Événement supprimé",
         description: "L'événement a été supprimé avec succès.",
       });
+      queryClient.invalidateQueries({ queryKey: ['/api/events'] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       setShowDeleteDialog(false);
     },
@@ -187,13 +190,27 @@ export function EventCard({ event }: EventCardProps) {
                 <Button 
                   variant="ghost" 
                   size="icon"
-                  onClick={() => window.location.href = `/events/${event.id}/edit`}
+                  onClick={() => setShowEditDialog(true)}
                   data-testid="button-edit-event"
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Éditer l'événement</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setShowInviteDialog(true)}
+                  data-testid="button-invite-participants"
+                >
+                  <UserPlus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Inviter des participants</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -380,6 +397,21 @@ export function EventCard({ event }: EventCardProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Event Dialog */}
+      <EditEventDialog 
+        event={event} 
+        open={showEditDialog} 
+        onOpenChange={setShowEditDialog} 
+      />
+
+      {/* Invite Participants Dialog */}
+      <InviteParticipantsDialog
+        eventId={event.id}
+        eventTitle={event.title}
+        open={showInviteDialog}
+        onOpenChange={setShowInviteDialog}
+      />
     </>
   );
 }

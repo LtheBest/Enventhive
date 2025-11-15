@@ -513,6 +513,129 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/events/:id/invite
+ * Invite participants to an event by email
+ */
+router.post('/:id/invite', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = req.user!;
+
+    if (!user.companyId) {
+      return res.status(403).json({ error: 'Utilisateur non associé à une entreprise' });
+    }
+
+    // Validate request body
+    const { participantEmails } = req.body;
+    
+    if (!Array.isArray(participantEmails) || participantEmails.length === 0) {
+      return res.status(400).json({ error: 'Liste d\'emails invalide' });
+    }
+
+    // Check if event exists and belongs to user's company
+    const [event] = await db
+      .select()
+      .from(events)
+      .where(
+        and(
+          eq(events.id, id),
+          eq(events.companyId, user.companyId)
+        )
+      )
+      .limit(1);
+
+    if (!event) {
+      return res.status(404).json({ error: 'Événement introuvable' });
+    }
+
+    // Get company info
+    const [company] = await db
+      .select()
+      .from(companies)
+      .where(eq(companies.id, user.companyId))
+      .limit(1);
+
+    if (!company) {
+      return res.status(500).json({ error: 'Entreprise introuvable' });
+    }
+
+    // Create participants and send invitations
+    const createdParticipants = [];
+    const failedEmails = [];
+
+    for (const email of participantEmails) {
+      try {
+        // Check if participant already exists for this event
+        const [existingParticipant] = await db
+          .select()
+          .from(participants)
+          .where(
+            and(
+              eq(participants.eventId, event.id),
+              eq(participants.email, email.toLowerCase())
+            )
+          )
+          .limit(1);
+
+        if (existingParticipant) {
+          failedEmails.push({ email, reason: 'Déjà invité' });
+          continue;
+        }
+
+        // Create new participant
+        const [participant] = await db
+          .insert(participants)
+          .values({
+            eventId: event.id,
+            email: email.toLowerCase(),
+            firstName: 'Invité', // Placeholder - will be updated when they register
+            lastName: '',
+            city: '', // Will be collected during registration
+            role: 'passenger',
+            status: 'pending',
+          })
+          .returning();
+
+        createdParticipants.push(participant);
+
+        // Generate invitation token and send email
+        const invitationToken = jwt.sign(
+          {
+            participantId: participant.id,
+            eventId: event.id,
+            email: participant.email,
+            type: 'participant_invitation',
+          },
+          JWT_SECRET,
+          { expiresIn: '30d' }
+        );
+
+        // Send invitation email
+        await sendParticipantInvitation({
+          company,
+          event,
+          participant,
+          invitationToken,
+        });
+      } catch (err) {
+        console.error(`Failed to invite ${email}:`, err);
+        failedEmails.push({ email, reason: 'Erreur lors de l\'envoi' });
+      }
+    }
+
+    res.json({
+      message: `${createdParticipants.length} invitation(s) envoyée(s) avec succès`,
+      invited: createdParticipants.length,
+      failed: failedEmails.length,
+      failedEmails,
+    });
+  } catch (error: any) {
+    console.error('Error inviting participants:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de l\'envoi des invitations' });
+  }
+});
+
+/**
  * GET /api/events/public/:slug
  * Get event details by public link slug (public endpoint - no auth required)
  */
