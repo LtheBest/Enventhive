@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar, MapPin, Building2, Users, Car, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useAddressAutocomplete } from '@/hooks/use-address-autocomplete';
 
 interface EventData {
   event: {
@@ -71,6 +72,11 @@ export default function PublicEventJoin() {
   const [showDriverForm, setShowDriverForm] = useState(false);
   const [showVehicleSelection, setShowVehicleSelection] = useState(false);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const [showDriverAddressSuggestions, setShowDriverAddressSuggestions] = useState(false);
+  const [showPassengerAddressSuggestions, setShowPassengerAddressSuggestions] = useState(false);
+
+  const driverAddressAutocomplete = useAddressAutocomplete();
+  const passengerAddressAutocomplete = useAddressAutocomplete();
 
   // Fetch event details
   const { data: eventData, isLoading: eventLoading } = useQuery<EventData>({
@@ -501,15 +507,48 @@ export default function PublicEventJoin() {
                     <CardTitle className="text-lg">Informations du trajet</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="space-y-2">
+                    <div className="space-y-2 relative">
                       <Label htmlFor="departureLocation">Lieu de départ *</Label>
                       <Input
                         id="departureLocation"
                         value={formData.departureLocation || ''}
-                        onChange={(e) => handleInputChange('departureLocation', e.target.value)}
-                        placeholder="Adresse complète du lieu de départ"
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          handleInputChange('departureLocation', value);
+                          driverAddressAutocomplete.search(value);
+                          setShowDriverAddressSuggestions(true);
+                        }}
+                        onFocus={() => {
+                          if (driverAddressAutocomplete.suggestions.length > 0) {
+                            setShowDriverAddressSuggestions(true);
+                          }
+                        }}
+                        placeholder="Commencez à taper une adresse..."
                         required
                       />
+                      {showDriverAddressSuggestions && driverAddressAutocomplete.suggestions.length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                          {driverAddressAutocomplete.suggestions.map((suggestion, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              className="w-full text-left px-4 py-2 hover:bg-muted text-sm"
+                              onClick={() => {
+                                handleInputChange('departureLocation', suggestion.properties.label);
+                                handleInputChange('departureCity', suggestion.properties.city || suggestion.properties.name);
+                                setShowDriverAddressSuggestions(false);
+                                driverAddressAutocomplete.clear();
+                              }}
+                            >
+                              <div className="font-medium">{suggestion.properties.label}</div>
+                              <div className="text-xs text-muted-foreground">{suggestion.properties.context}</div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {driverAddressAutocomplete.isLoading && (
+                        <p className="text-xs text-muted-foreground mt-1">Recherche en cours...</p>
+                      )}
                     </div>
                     
                     <div className="grid md:grid-cols-2 gap-4">
@@ -584,14 +623,46 @@ export default function PublicEventJoin() {
 
               {/* Passenger Form */}
               {!showDriverForm && (
-                <div className="space-y-2">
+                <div className="space-y-2 relative">
                   <Label htmlFor="passengerDepartureLocation">Votre lieu de départ</Label>
                   <Input
                     id="passengerDepartureLocation"
                     value={formData.passengerDepartureLocation || ''}
-                    onChange={(e) => handleInputChange('passengerDepartureLocation', e.target.value)}
-                    placeholder="Adresse complète de votre lieu de départ"
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      handleInputChange('passengerDepartureLocation', value);
+                      passengerAddressAutocomplete.search(value);
+                      setShowPassengerAddressSuggestions(true);
+                    }}
+                    onFocus={() => {
+                      if (passengerAddressAutocomplete.suggestions.length > 0) {
+                        setShowPassengerAddressSuggestions(true);
+                      }
+                    }}
+                    placeholder="Commencez à taper une adresse..."
                   />
+                  {showPassengerAddressSuggestions && passengerAddressAutocomplete.suggestions.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                      {passengerAddressAutocomplete.suggestions.map((suggestion, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          className="w-full text-left px-4 py-2 hover:bg-muted text-sm"
+                          onClick={() => {
+                            handleInputChange('passengerDepartureLocation', suggestion.properties.label);
+                            setShowPassengerAddressSuggestions(false);
+                            passengerAddressAutocomplete.clear();
+                          }}
+                        >
+                          <div className="font-medium">{suggestion.properties.label}</div>
+                          <div className="text-xs text-muted-foreground">{suggestion.properties.context}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {passengerAddressAutocomplete.isLoading && (
+                    <p className="text-xs text-muted-foreground mt-1">Recherche en cours...</p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Cette information nous aidera à vous mettre en relation avec des conducteurs dans votre zone
                   </p>
