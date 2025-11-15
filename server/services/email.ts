@@ -246,7 +246,13 @@ export async function sendParticipantInvitation(data: ParticipantInvitationData)
     minute: '2-digit',
   });
 
-  const acceptUrl = `${BASE_URL}/invitations/accept?token=${invitationToken}`;
+  const eventTime = new Date(event.startDate).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  // Rediriger directement vers la page publique d'inscription
+  const acceptUrl = `${BASE_URL}/events/${event.id}/join`;
   const declineUrl = `${BASE_URL}/invitations/decline?token=${invitationToken}`;
 
   const msg: sgMail.MailDataRequired = {
@@ -301,12 +307,21 @@ ${company.name}`,
       
       <div class="event-card">
         <h2 style="margin-top: 0; color: #3b82f6;">📅 ${event.title}</h2>
-        <p><strong>📍 Lieu :</strong> ${event.location}, ${event.city}</p>
-        <p><strong>🕐 Date :</strong> ${eventDate}</p>
-        ${event.description ? `<p><strong>📝 Description :</strong> ${event.description}</p>` : ''}
+        <p><strong>🏢 Organisateur :</strong> ${company.name}</p>
+        <p><strong>📝 Type :</strong> ${event.eventType === 'single' ? 'Événement unique' : 'Événement récurrent'}</p>
+        <p><strong>📅 Date :</strong> ${eventDate}</p>
+        <p><strong>🕐 Heure :</strong> ${eventTime}</p>
+        <p><strong>📍 Adresse :</strong> ${event.location}, ${event.city}</p>
+        ${event.description ? `<p><strong>💬 Description :</strong> ${event.description}</p>` : ''}
+        ${event.maxParticipants ? `<p><strong>👥 Places disponibles :</strong> ${event.maxParticipants} participants max</p>` : ''}
       </div>
       
-      <p>🚗 <strong>Covoiturage disponible !</strong> Un système de covoiturage intelligent sera mis en place pour faciliter votre participation.</p>
+      <p>🚗 <strong>Covoiturage disponible !</strong> Un système de covoiturage intelligent sera mis en place pour faciliter votre participation. Vous pourrez :</p>
+      <ul style="background: #e0f2fe; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <li>🚙 Proposer votre véhicule en tant que conducteur</li>
+        <li>🧳 Rechercher un trajet en tant que passager</li>
+        <li>📍 Être mis en relation automatiquement avec des personnes de votre zone</li>
+      </ul>
       
       <div style="text-align: center; margin: 30px 0;">
         <a href="${acceptUrl}" class="button button-accept">✅ Accepter l'invitation</a>

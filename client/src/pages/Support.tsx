@@ -68,16 +68,9 @@ export default function Support() {
   // Create new support request
   const createRequest = useMutation({
     mutationFn: async (data: { requestType: string; subject: string; message: string }) => {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('/api/support/requests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(data),
-        credentials: 'include',
-      });
+      // Import apiRequest for proper authentication
+      const { apiRequest } = await import('@/lib/queryClient');
+      const res = await apiRequest('POST', '/api/support/requests', data);
 
       if (!res.ok) {
         const error = await res.json();
