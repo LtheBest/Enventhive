@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
-import { events, eventParents, companies, participants, vehicles } from '@shared/schema';
+import { events, eventParents, companies, participants, vehicles, companyPlanState, plans } from '@shared/schema';
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { requireAuth } from '../auth/middleware';
 import { checkEventLimit } from '../middleware/planLimits';
@@ -67,16 +67,34 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
     // Extract participants and vehicles
     const { participants: initialParticipants, vehicles: initialVehicles, ...eventFields } = validatedData as any;
 
+    // Get company's plan to determine maxParticipants limit
+    const [planData] = await db
+      .select({
+        maxParticipants: plans.features,
+      })
+      .from(companyPlanState)
+      .innerJoin(plans, eq(companyPlanState.planId, plans.id))
+      .where(eq(companyPlanState.companyId, user.companyId))
+      .limit(1);
+
+    if (!planData) {
+      return res.status(500).json({ error: 'Plan non trouvé pour cette entreprise' });
+    }
+
+    const features = planData.maxParticipants as any;
+    const maxParticipants = features.maxParticipants; // Can be null (unlimited) or a number
+
     // Generate a unique public link slug
     const publicLinkSlug = crypto.randomBytes(8).toString('hex');
     const publicLink = `${BASE_URL}/events/${publicLinkSlug}/public`;
 
-    // Override companyId with authenticated user's company and add publicLink
+    // Override companyId with authenticated user's company, add publicLink and maxParticipants from plan
     const eventData = {
       ...eventFields,
       companyId: user.companyId,
       createdByUserId: user.userId,
       publicLink,
+      maxParticipants, // Set from plan limits
     };
 
     // Create event

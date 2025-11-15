@@ -44,7 +44,6 @@ export function CreateEventDialog() {
     location: "",
     city: "",
     description: "",
-    maxParticipants: "",
   });
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -102,7 +101,6 @@ export function CreateEventDialog() {
       location: "", 
       city: "",
       description: "",
-      maxParticipants: "",
     });
     setParticipants([]);
     setVehicles([]);
@@ -156,7 +154,6 @@ export function CreateEventDialog() {
       city: cityFromLocation,
       description: formData.description || null,
       eventType: eventType,
-      maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null,
       participants: participants.length > 0 ? participants : undefined,
       vehicles: vehicles.length > 0 ? vehicles : undefined,
     };
@@ -244,18 +241,6 @@ export function CreateEventDialog() {
                 onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                 data-testid="input-event-city"
                 required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="maxParticipants">Nombre max de participants (optionnel)</Label>
-              <Input
-                id="maxParticipants"
-                type="number"
-                min="1"
-                placeholder="Ex: 50"
-                value={formData.maxParticipants}
-                onChange={(e) => setFormData({ ...formData, maxParticipants: e.target.value })}
               />
             </div>
 
