@@ -47,7 +47,26 @@ export const getQueryFn: <T>(options: {
       headers["Authorization"] = `Bearer ${token}`;
     }
     
-    const res = await fetch(queryKey.join("/") as string, {
+    // Build URL from queryKey
+    // If queryKey is ['/api/events', { limit: 5 }], we need to:
+    // 1. Use the first element as base URL
+    // 2. Convert second element (if object) to query params
+    let url = queryKey[0] as string;
+    
+    if (queryKey.length > 1 && typeof queryKey[1] === 'object' && queryKey[1] !== null) {
+      const params = new URLSearchParams();
+      Object.entries(queryKey[1] as Record<string, any>).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      });
+      const queryString = params.toString();
+      if (queryString) {
+        url += (url.includes('?') ? '&' : '?') + queryString;
+      }
+    }
+    
+    const res = await fetch(url, {
       headers,
       credentials: "include",
     });
