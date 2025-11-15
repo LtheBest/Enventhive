@@ -23,25 +23,9 @@ export default function Events() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  // Fetch events from API
+  // Fetch events from API with authentication
   const { data: eventsData, isLoading, error } = useQuery({
-    queryKey: ['events', statusFilter],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (statusFilter !== "all") {
-        params.append('status', statusFilter);
-      }
-      
-      const response = await fetch(`/api/events?${params.toString()}`, {
-        credentials: 'include',
-      });
-      
-      if (!response.ok) {
-        throw new Error('Erreur lors du chargement des événements');
-      }
-      
-      return response.json();
-    },
+    queryKey: ['/api/events', statusFilter !== 'all' ? { status: statusFilter } : {}],
   });
 
   const events = eventsData?.events || [];
