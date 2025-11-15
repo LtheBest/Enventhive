@@ -26,6 +26,9 @@ const insertEventSchema = createInsertSchema(events).omit({
 const createEventSchema = insertEventSchema.extend({
   // Override companyId validation - will be set from authenticated user
   companyId: z.string().optional(),
+  // Accept string dates from JSON and convert to Date objects
+  startDate: z.string().or(z.date()).transform((val) => typeof val === 'string' ? new Date(val) : val),
+  endDate: z.string().or(z.date()).transform((val) => typeof val === 'string' ? new Date(val) : val).optional(),
   // Allow optional participant emails for sending invitations
   participantEmails: z.array(z.string().email()).optional(),
   // Legacy: Allow optional participants array for backward compatibility
