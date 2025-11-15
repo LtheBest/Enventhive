@@ -601,3 +601,29 @@ export type InsertPassengerRideRequest = z.infer<typeof insertPassengerRideReque
 
 export type VehicleBooking = typeof vehicleBookings.$inferSelect;
 export type InsertVehicleBooking = z.infer<typeof insertVehicleBookingSchema>;
+
+// Temporary Plan Overrides - Admin-forced temporary plan changes
+export const temporaryPlanOverrides = pgTable("temporary_plan_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").references(() => companies.id, { onDelete: "cascade" }).notNull(),
+  originalPlanId: varchar("original_plan_id").references(() => plans.id).notNull(),
+  temporaryPlanId: varchar("temporary_plan_id").references(() => plans.id).notNull(),
+  startDate: timestamp("start_date").defaultNow().notNull(),
+  endDate: timestamp("end_date").notNull(),
+  reason: text("reason"),
+  createdByAdminId: varchar("created_by_admin_id").references(() => users.id, { onDelete: "set null" }),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  companyIdx: index("temporary_plan_overrides_company_idx").on(table.companyId),
+  endDateIdx: index("temporary_plan_overrides_end_date_idx").on(table.endDate),
+  isActiveIdx: index("temporary_plan_overrides_is_active_idx").on(table.isActive),
+}));
+
+export const insertTemporaryPlanOverrideSchema = createInsertSchema(temporaryPlanOverrides).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export type TemporaryPlanOverride = typeof temporaryPlanOverrides.$inferSelect;
+export type InsertTemporaryPlanOverride = z.infer<typeof insertTemporaryPlanOverrideSchema>;

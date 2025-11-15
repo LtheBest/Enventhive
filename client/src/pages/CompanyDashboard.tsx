@@ -267,7 +267,7 @@ export default function CompanyDashboard() {
                       data-testid={`event-item-${event.id}`}
                     >
                       <div>
-                        <p className="font-medium text-sm">{event.name}</p>
+                        <p className="font-medium text-sm">{event.title || event.name}</p>
                         <p className="text-xs text-muted-foreground">{event.city}</p>
                       </div>
                       <Link href={`/events/${event.id}`}>

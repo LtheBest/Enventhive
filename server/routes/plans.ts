@@ -26,9 +26,15 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/plans/current-features - Get current company's plan features (MUST be before /:id)
-router.get('/current-features', requireAuth, requireCompany, async (req, res) => {
+// Allow access for both authenticated users - will return 404 for non-company users gracefully
+router.get('/current-features', requireAuth, async (req, res) => {
   try {
     const companyId = req.user!.companyId;
+    
+    // If user is not associated with a company (e.g., admin), return appropriate response
+    if (!companyId) {
+      return res.status(404).json({ error: 'Utilisateur non associé à une entreprise' });
+    }
 
     // Get company's current plan with features
     const [planData] = await db

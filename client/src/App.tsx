@@ -41,6 +41,7 @@ import Register from "@/pages/Register";
 import AdminLogin from "@/pages/AdminLogin";
 import PaymentSuccess from "@/pages/PaymentSuccess";
 import PaymentCancel from "@/pages/PaymentCancel";
+import PublicEventJoin from "@/pages/PublicEventJoin";
 import NotFound from "@/pages/not-found";
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -87,6 +88,7 @@ function Router() {
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/payment/success" component={PaymentSuccess} />
       <Route path="/payment/cancel" component={PaymentCancel} />
+      <Route path="/events/:eventId/join" component={PublicEventJoin} />
       
       {/* Company routes */}
       <Route path="/dashboard">
