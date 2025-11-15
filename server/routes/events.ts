@@ -111,9 +111,9 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
     const features = planData.maxParticipants as any;
     const maxParticipants = features.maxParticipants; // Can be null (unlimited) or a number
 
-    // Generate a unique public link slug
+    // Generate a unique public link slug - will use the event ID after creation
     const publicLinkSlug = crypto.randomBytes(8).toString('hex');
-    const publicLink = `${BASE_URL}/events/${publicLinkSlug}/public`;
+    const publicLink = `${BASE_URL}/events/PLACEHOLDER/join`; // Will be updated with actual event ID
 
     // Override companyId with authenticated user's company, add publicLink and maxParticipants from plan
     const eventData = {
@@ -130,15 +130,16 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
       .values(eventData)
       .returning();
 
-    // Generate QR code for the event
+    // Generate QR code for the event and update public link with actual event ID
     let updatedEvent = event;
     try {
       const qrCode = await generateEventQRCode(event.id);
+      const actualPublicLink = `${BASE_URL}/events/${event.id}/join`;
       
-      // Update event with QR code
+      // Update event with QR code and correct public link
       [updatedEvent] = await db
         .update(events)
-        .set({ qrCode })
+        .set({ qrCode, publicLink: actualPublicLink })
         .where(eq(events.id, event.id))
         .returning();
     } catch (qrError) {

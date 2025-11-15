@@ -19,7 +19,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Calendar, MapPin, Users, Car, Share2, Trash2, QrCode, Link as LinkIcon, Copy, Check, Edit, Eye } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Calendar, MapPin, Users, Download, Trash2, QrCode, Link as LinkIcon, Copy, Check, Edit, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -50,6 +55,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 
 export function EventCard({ event }: EventCardProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const { toast } = useToast();
@@ -109,6 +115,23 @@ export function EventCard({ event }: EventCardProps) {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const downloadQRCode = () => {
+    if (!event.qrCode) return;
+    
+    // Create a temporary link element to trigger download
+    const link = document.createElement('a');
+    link.href = event.qrCode;
+    link.download = `qr-code-${event.title.replace(/\s+/g, '-').toLowerCase()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast({
+      title: "QR Code téléchargé !",
+      description: "Le QR Code a été téléchargé avec succès.",
+    });
+  };
+
   return (
     <>
       <Card className={cn("border-l-4", statusInfo.color)} data-testid={`card-event-${event.id}`}>
@@ -143,82 +166,195 @@ export function EventCard({ event }: EventCardProps) {
             </div>
           )}
         </CardContent>
-        <CardFooter className="flex justify-end gap-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => window.location.href = `/events/${event.id}`}
-            data-testid="button-view-event"
-          >
-            <Eye className="h-4 w-4 mr-2" />
-            Détails
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => setShowShareDialog(true)}
-            data-testid="button-share-event"
-          >
-            <Share2 className="h-4 w-4 mr-2" />
-            Partager
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => setShowDeleteDialog(true)}
-            data-testid="button-delete-event"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+        <CardFooter className="flex flex-wrap justify-between items-center gap-2 pt-4 border-t">
+          <div className="flex gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setShowDetailsDialog(true)}
+                  data-testid="button-view-event"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Voir les détails</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => window.location.href = `/events/${event.id}/edit`}
+                  data-testid="button-edit-event"
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Éditer l'événement</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="text-destructive hover:text-destructive"
+                  data-testid="button-delete-event"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Supprimer l'événement</TooltipContent>
+            </Tooltip>
+          </div>
+
+          <div className="flex gap-2">
+            {event.publicLink && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => copyToClipboard(event.publicLink!)}
+                    data-testid="button-copy-link"
+                  >
+                    {copiedLink ? <Check className="h-4 w-4 text-green-600" /> : <LinkIcon className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Copier le lien public</TooltipContent>
+              </Tooltip>
+            )}
+
+            {event.qrCode && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={downloadQRCode}
+                    data-testid="button-download-qr"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Télécharger le QR Code</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         </CardFooter>
       </Card>
 
-      {/* Share Dialog */}
-      <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
-        <DialogContent className="max-w-md">
+      {/* Details Dialog */}
+      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Partager l'événement</DialogTitle>
+            <DialogTitle className="text-2xl">{event.title}</DialogTitle>
             <DialogDescription>
-              Partagez le lien public ou le QR code de votre événement
+              Détails complets de l'événement
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-6">
+            {/* Event Info */}
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="font-medium">Date et heure</p>
+                  <p className="text-sm text-muted-foreground">{formattedDate}</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="font-medium">Lieu</p>
+                  <p className="text-sm text-muted-foreground">{event.location}</p>
+                  <p className="text-sm text-muted-foreground">{event.city}</p>
+                </div>
+              </div>
+
+              {event.maxParticipants && (
+                <div className="flex items-start gap-3">
+                  <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="font-medium">Participants</p>
+                    <p className="text-sm text-muted-foreground">Maximum {event.maxParticipants} personnes</p>
+                  </div>
+                </div>
+              )}
+
+              {event.description && (
+                <div className="pt-2">
+                  <p className="font-medium mb-1">Description</p>
+                  <p className="text-sm text-muted-foreground">{event.description}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Public Link Section */}
             {event.publicLink && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Lien public</label>
+              <div className="space-y-2 p-4 border rounded-lg bg-muted/50">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <LinkIcon className="h-4 w-4" />
+                  Lien public de l'événement
+                </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     readOnly
                     value={event.publicLink}
-                    className="flex-1 px-3 py-2 text-sm border rounded-md bg-muted"
+                    className="flex-1 px-3 py-2 text-sm border rounded-md bg-background"
                   />
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => copyToClipboard(event.publicLink!)}
                   >
-                    {copiedLink ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    {copiedLink ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
               </div>
             )}
             
+            {/* QR Code Section */}
             {event.qrCode && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">QR Code</label>
-                <div className="flex justify-center p-4 border rounded-lg bg-white">
-                  <img 
-                    src={event.qrCode} 
-                    alt="QR Code" 
-                    className="w-48 h-48"
-                  />
+              <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <QrCode className="h-4 w-4" />
+                  QR Code pour l'inscription
+                </label>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="p-4 border rounded-lg bg-white">
+                    <img 
+                      src={event.qrCode} 
+                      alt="QR Code" 
+                      className="w-48 h-48"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={downloadQRCode}
+                    className="w-full"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Télécharger le QR Code
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Les participants peuvent scanner ce code pour s'inscrire à l'événement
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground text-center">
-                  Scannez ce code pour accéder à l'événement
-                </p>
               </div>
             )}
+
+            {/* Status Badge */}
+            <div className="flex justify-between items-center pt-2 border-t">
+              <span className="text-sm font-medium">Statut de l'événement</span>
+              <Badge variant="outline">{statusInfo.label}</Badge>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
