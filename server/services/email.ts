@@ -754,6 +754,222 @@ TEAMMOVE Support System
   return sendEmail(msg);
 }
 
+interface DriverAvailableEmailData {
+  passengerEmail: string;
+  passengerFirstName: string;
+  event: Event;
+  company: Company;
+  driverFirstName: string;
+  driverLastName: string;
+  departureLocation: string;
+  departureTime: Date;
+  availableSeats: number;
+}
+
+export async function sendDriverAvailableEmail(data: DriverAvailableEmailData): Promise<boolean> {
+  const { passengerEmail, passengerFirstName, event, company, driverFirstName, driverLastName, departureLocation, departureTime, availableSeats } = data;
+  
+  const eventDate = new Date(event.startDate).toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const departureTimeFormatted = new Date(departureTime).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const msg: sgMail.MailDataRequired = {
+    to: passengerEmail,
+    from: FROM_EMAIL,
+    subject: `🚗 Un conducteur est disponible pour "${event.title}"`,
+    text: `Bonjour ${passengerFirstName},
+
+Bonne nouvelle ! Un conducteur est maintenant disponible pour l'événement "${event.title}".
+
+Conducteur : ${driverFirstName} ${driverLastName}
+Lieu de départ : ${departureLocation}
+Heure de départ : ${departureTimeFormatted}
+Places disponibles : ${availableSeats}
+
+Événement :
+- Date : ${eventDate}
+- Lieu : ${event.location}, ${event.city}
+
+Réservez votre place maintenant : ${BASE_URL}/events/${event.id}/public
+
+Cordialement,
+${company.name}`,
+    html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+    .button { display: inline-block; padding: 12px 30px; background: #10b981; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+    .driver-card { background: white; padding: 20px; border-left: 4px solid #10b981; margin: 20px 0; border-radius: 5px; }
+    .footer { text-align: center; margin-top: 30px; color: #777; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🚗 Conducteur disponible !</h1>
+    </div>
+    <div class="content">
+      <p>Bonjour ${passengerFirstName},</p>
+      
+      <p>Bonne nouvelle ! Un conducteur est maintenant disponible pour vous emmener à l'événement <strong>"${event.title}"</strong>.</p>
+      
+      <div class="driver-card">
+        <h3 style="margin-top: 0; color: #10b981;">👤 ${driverFirstName} ${driverLastName}</h3>
+        <p><strong>📍 Lieu de départ :</strong> ${departureLocation}</p>
+        <p><strong>🕐 Heure de départ :</strong> ${departureTimeFormatted}</p>
+        <p><strong>💺 Places disponibles :</strong> ${availableSeats}</p>
+      </div>
+      
+      <div style="background: #f0fdf4; padding: 15px; border-left: 4px solid #10b981; margin: 20px 0; border-radius: 5px;">
+        <p><strong>📅 Événement :</strong> ${event.title}</p>
+        <p><strong>📍 Lieu :</strong> ${event.location}, ${event.city}</p>
+        <p><strong>🕐 Date :</strong> ${eventDate}</p>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${BASE_URL}/events/${event.id}/public" class="button">Réserver ma place</a>
+      </div>
+      
+      <p style="font-size: 14px; color: #777;">Les places sont limitées. Réservez vite !</p>
+    </div>
+    <div class="footer">
+      <p>© ${new Date().getFullYear()} TEAMMOVE - ${company.name}</p>
+    </div>
+  </div>
+</body>
+</html>
+    `,
+  };
+
+  return sendEmail(msg);
+}
+
+interface BookingConfirmationEmailData {
+  passengerEmail: string;
+  passengerFirstName: string;
+  event: Event;
+  company: Company;
+  driverFirstName: string;
+  driverLastName: string;
+  departureLocation: string;
+  departureTime: Date;
+}
+
+export async function sendBookingConfirmationEmail(data: BookingConfirmationEmailData): Promise<boolean> {
+  const { passengerEmail, passengerFirstName, event, company, driverFirstName, driverLastName, departureLocation, departureTime } = data;
+  
+  const eventDate = new Date(event.startDate).toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const departureTimeFormatted = new Date(departureTime).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const msg: sgMail.MailDataRequired = {
+    to: passengerEmail,
+    from: FROM_EMAIL,
+    subject: `✅ Réservation confirmée pour "${event.title}"`,
+    text: `Bonjour ${passengerFirstName},
+
+Votre réservation est confirmée pour l'événement "${event.title}".
+
+Votre conducteur :
+${driverFirstName} ${driverLastName}
+
+Détails du trajet :
+- Lieu de départ : ${departureLocation}
+- Heure de départ : ${departureTimeFormatted}
+
+Événement :
+- Date : ${eventDate}
+- Lieu : ${event.location}, ${event.city}
+
+Bon voyage !
+
+Cordialement,
+${company.name}`,
+    html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+    .info-card { background: white; padding: 20px; border-left: 4px solid #3b82f6; margin: 20px 0; border-radius: 5px; }
+    .footer { text-align: center; margin-top: 30px; color: #777; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>✅ Réservation confirmée</h1>
+    </div>
+    <div class="content">
+      <p>Bonjour ${passengerFirstName},</p>
+      
+      <p>Votre réservation est confirmée pour l'événement <strong>"${event.title}"</strong>.</p>
+      
+      <div class="info-card">
+        <h3 style="margin-top: 0; color: #3b82f6;">🚗 Votre conducteur</h3>
+        <p><strong>👤 Nom :</strong> ${driverFirstName} ${driverLastName}</p>
+        <p><strong>📍 Lieu de départ :</strong> ${departureLocation}</p>
+        <p><strong>🕐 Heure de départ :</strong> ${departureTimeFormatted}</p>
+      </div>
+      
+      <div class="info-card">
+        <h3 style="margin-top: 0; color: #3b82f6;">📅 Détails de l'événement</h3>
+        <p><strong>Événement :</strong> ${event.title}</p>
+        <p><strong>📍 Lieu :</strong> ${event.location}, ${event.city}</p>
+        <p><strong>🕐 Date :</strong> ${eventDate}</p>
+      </div>
+      
+      <p><strong>💡 N'oubliez pas :</strong></p>
+      <ul>
+        <li>Soyez ponctuel au point de départ</li>
+        <li>Ayez votre téléphone avec vous</li>
+        <li>Respectez les règles du covoiturage</li>
+      </ul>
+      
+      <p>Bon voyage et profitez bien de l'événement ! 🎉</p>
+    </div>
+    <div class="footer">
+      <p>© ${new Date().getFullYear()} TEAMMOVE - ${company.name}</p>
+    </div>
+  </div>
+</body>
+</html>
+    `,
+  };
+
+  return sendEmail(msg);
+}
+
 export default {
   sendWelcomeEmail,
   sendEventCreatedEmail,
@@ -762,4 +978,6 @@ export default {
   sendEventReminderEmail,
   sendNoDriverAlertEmail,
   sendSupportNotificationEmail,
+  sendDriverAvailableEmail,
+  sendBookingConfirmationEmail,
 };
