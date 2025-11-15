@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Calendar, MapPin, Users, Car, Share2, Trash2, QrCode, Link as LinkIcon, Copy, Check } from "lucide-react";
+import { Calendar, MapPin, Users, Car, Share2, Trash2, QrCode, Link as LinkIcon, Copy, Check, Edit, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -144,6 +144,15 @@ export function EventCard({ event }: EventCardProps) {
           )}
         </CardContent>
         <CardFooter className="flex justify-end gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => window.location.href = `/events/${event.id}`}
+            data-testid="button-view-event"
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            Détails
+          </Button>
           <Button 
             variant="outline" 
             size="sm"

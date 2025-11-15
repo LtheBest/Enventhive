@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { db } from '../db';
 import { events, participants, vehicles, companyPlanState, plans } from '../../shared/schema';
-import { eq, and, count, sql } from 'drizzle-orm';
+import { eq, and, count, sql, gte, lte } from 'drizzle-orm';
 
 /**
  * Middleware to check if company can create more events
