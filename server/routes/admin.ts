@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { requireAdmin } from '../auth/middleware';
 import { db } from '../db';
-import { companies, companyPlanState, planHistory, plans, transactions, users, invoices, adminMessages, messageRecipients, events, participants } from '@shared/schema';
-import { eq, desc, sql, and, count as drizzleCount, inArray } from 'drizzle-orm';
+import { companies, companyPlanState, planHistory, plans, transactions, users, invoices, adminMessages, messageRecipients, events, participants, temporaryPlanOverrides } from '@shared/schema';
+import { eq, desc, sql, and, count as drizzleCount, inArray, lt } from 'drizzle-orm';
 import { z } from 'zod';
 
 const router = Router();
@@ -943,6 +943,285 @@ router.put('/profile', async (req: Request, res: Response) => {
     }
     console.error('Update admin profile error:', error);
     res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+/**
+ * POST /api/admin/temporary-plan-override
+ * Force a temporary plan change for a company (1 week to 1 month)
+ * After the period, the plan will automatically revert to the original
+ */
+const temporaryPlanOverrideSchema = z.object({
+  companyId: z.string().uuid(),
+  temporaryPlanId: z.string().uuid(),
+  durationDays: z.number().int().min(7).max(30),
+  reason: z.string().optional()
+});
+
+router.post('/temporary-plan-override', async (req: Request, res: Response) => {
+  try {
+    const { companyId, temporaryPlanId, durationDays, reason } = temporaryPlanOverrideSchema.parse(req.body);
+    const adminId = (req as any).user.id;
+
+    // Verify company exists
+    const [company] = await db
+      .select()
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1);
+
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    // Verify temporary plan exists
+    const [tempPlan] = await db
+      .select()
+      .from(plans)
+      .where(eq(plans.id, temporaryPlanId))
+      .limit(1);
+
+    if (!tempPlan) {
+      return res.status(404).json({ error: 'Temporary plan not found' });
+    }
+
+    // Get current plan
+    const [currentState] = await db
+      .select()
+      .from(companyPlanState)
+      .where(eq(companyPlanState.companyId, companyId))
+      .limit(1);
+
+    if (!currentState) {
+      return res.status(404).json({ error: 'Company plan state not found' });
+    }
+
+    // Calculate end date
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + durationDays);
+
+    // Check if there's already an active override
+    const [activeOverride] = await db
+      .select()
+      .from(temporaryPlanOverrides)
+      .where(
+        and(
+          eq(temporaryPlanOverrides.companyId, companyId),
+          eq(temporaryPlanOverrides.isActive, true)
+        )
+      )
+      .limit(1);
+
+    if (activeOverride) {
+      return res.status(400).json({ 
+        error: 'An active temporary plan override already exists for this company. Please deactivate it first.' 
+      });
+    }
+
+    // Create temporary override record
+    const [override] = await db
+      .insert(temporaryPlanOverrides)
+      .values({
+        companyId,
+        originalPlanId: currentState.planId,
+        temporaryPlanId,
+        startDate: new Date(),
+        endDate,
+        reason: reason || 'Admin-forced temporary plan change',
+        createdByAdminId: adminId,
+        isActive: true,
+      })
+      .returning();
+
+    // Update company plan to temporary plan
+    await db
+      .update(companyPlanState)
+      .set({
+        planId: temporaryPlanId,
+        updatedAt: new Date(),
+      })
+      .where(eq(companyPlanState.companyId, companyId));
+
+    // Log in plan history
+    await db.insert(planHistory).values({
+      companyId,
+      oldPlanId: currentState.planId,
+      newPlanId: temporaryPlanId,
+      reason: `Temporary override (${durationDays} days): ${reason || 'Admin decision'}`,
+      changedByUserId: adminId,
+    });
+
+    res.json({
+      success: true,
+      message: `Temporary plan override created for ${durationDays} days`,
+      override: {
+        id: override.id,
+        companyId: override.companyId,
+        originalPlanTier: currentState.planId,
+        temporaryPlanTier: tempPlan.tier,
+        startDate: override.startDate,
+        endDate: override.endDate,
+      },
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid request', details: error.errors });
+    }
+    console.error('Temporary plan override error:', error);
+    res.status(500).json({ error: 'Failed to create temporary plan override' });
+  }
+});
+
+/**
+ * GET /api/admin/temporary-plan-overrides
+ * List all temporary plan overrides (active and expired)
+ */
+router.get('/temporary-plan-overrides', async (req: Request, res: Response) => {
+  try {
+    const overrides = await db
+      .select({
+        id: temporaryPlanOverrides.id,
+        companyId: temporaryPlanOverrides.companyId,
+        companyName: companies.name,
+        originalPlanTier: sql<string>`(SELECT tier FROM ${plans} WHERE id = ${temporaryPlanOverrides.originalPlanId})`,
+        temporaryPlanTier: sql<string>`(SELECT tier FROM ${plans} WHERE id = ${temporaryPlanOverrides.temporaryPlanId})`,
+        startDate: temporaryPlanOverrides.startDate,
+        endDate: temporaryPlanOverrides.endDate,
+        reason: temporaryPlanOverrides.reason,
+        isActive: temporaryPlanOverrides.isActive,
+        createdAt: temporaryPlanOverrides.createdAt,
+      })
+      .from(temporaryPlanOverrides)
+      .innerJoin(companies, eq(temporaryPlanOverrides.companyId, companies.id))
+      .orderBy(desc(temporaryPlanOverrides.createdAt));
+
+    res.json({
+      success: true,
+      overrides,
+    });
+  } catch (error: any) {
+    console.error('List temporary overrides error:', error);
+    res.status(500).json({ error: 'Failed to fetch temporary plan overrides' });
+  }
+});
+
+/**
+ * POST /api/admin/deactivate-plan-override/:id
+ * Manually deactivate a temporary plan override and revert to original plan
+ */
+router.post('/deactivate-plan-override/:id', async (req: Request, res: Response) => {
+  try {
+    const overrideId = req.params.id;
+    const adminId = (req as any).user.id;
+
+    // Get override details
+    const [override] = await db
+      .select()
+      .from(temporaryPlanOverrides)
+      .where(eq(temporaryPlanOverrides.id, overrideId))
+      .limit(1);
+
+    if (!override) {
+      return res.status(404).json({ error: 'Temporary plan override not found' });
+    }
+
+    if (!override.isActive) {
+      return res.status(400).json({ error: 'This override is already inactive' });
+    }
+
+    // Revert company to original plan
+    await db
+      .update(companyPlanState)
+      .set({
+        planId: override.originalPlanId,
+        updatedAt: new Date(),
+      })
+      .where(eq(companyPlanState.companyId, override.companyId));
+
+    // Deactivate override
+    await db
+      .update(temporaryPlanOverrides)
+      .set({
+        isActive: false,
+      })
+      .where(eq(temporaryPlanOverrides.id, overrideId));
+
+    // Log in plan history
+    await db.insert(planHistory).values({
+      companyId: override.companyId,
+      oldPlanId: override.temporaryPlanId,
+      newPlanId: override.originalPlanId,
+      reason: 'Temporary override ended (manually deactivated)',
+      changedByUserId: adminId,
+    });
+
+    res.json({
+      success: true,
+      message: 'Temporary plan override deactivated, company reverted to original plan',
+    });
+  } catch (error: any) {
+    console.error('Deactivate override error:', error);
+    res.status(500).json({ error: 'Failed to deactivate temporary plan override' });
+  }
+});
+
+/**
+ * Cron job endpoint to check and revert expired temporary overrides
+ * Should be called periodically (e.g., daily via cron or scheduler)
+ */
+router.post('/check-expired-overrides', async (req: Request, res: Response) => {
+  try {
+    // Find all active overrides that have passed their end date
+    const expiredOverrides = await db
+      .select()
+      .from(temporaryPlanOverrides)
+      .where(
+        and(
+          eq(temporaryPlanOverrides.isActive, true),
+          lt(temporaryPlanOverrides.endDate, new Date())
+        )
+      );
+
+    let revertedCount = 0;
+    
+    for (const override of expiredOverrides) {
+      // Revert company to original plan
+      await db
+        .update(companyPlanState)
+        .set({
+          planId: override.originalPlanId,
+          updatedAt: new Date(),
+        })
+        .where(eq(companyPlanState.companyId, override.companyId));
+
+      // Deactivate override
+      await db
+        .update(temporaryPlanOverrides)
+        .set({
+          isActive: false,
+        })
+        .where(eq(temporaryPlanOverrides.id, override.id));
+
+      // Log in plan history
+      await db.insert(planHistory).values({
+        companyId: override.companyId,
+        oldPlanId: override.temporaryPlanId,
+        newPlanId: override.originalPlanId,
+        reason: 'Temporary override period ended (automatic revert)',
+        changedByUserId: override.createdByAdminId,
+      });
+
+      revertedCount++;
+    }
+
+    res.json({
+      success: true,
+      message: `Checked and reverted ${revertedCount} expired temporary plan overrides`,
+      revertedCount,
+    });
+  } catch (error: any) {
+    console.error('Check expired overrides error:', error);
+    res.status(500).json({ error: 'Failed to check expired overrides' });
   }
 });
 

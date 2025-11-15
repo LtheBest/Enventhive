@@ -41,7 +41,11 @@ const createEventSchema = insertEventSchema.extend({
     totalSeats: z.number().int().min(1),
     departureLocation: z.string().min(1),
     departureCity: z.string().min(1),
+    departureTime: z.string().or(z.date()).optional(), // Optional at creation, defaults to event start
     destinationLocation: z.string().optional(),
+    isPaidRide: z.boolean().optional().default(false),
+    pricePerKm: z.number().optional(),
+    estimatedDistance: z.number().optional(),
     notes: z.string().optional(),
   })).optional(),
   // Allow optional company vehicle IDs array
@@ -187,6 +191,11 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
           );
 
           if (driver) {
+            // Use provided departure time or default to event start time
+            const departureTime = vehicleData.departureTime 
+              ? new Date(vehicleData.departureTime)
+              : new Date(event.startDate);
+            
             const [vehicle] = await db
               .insert(vehicles)
               .values({
@@ -196,7 +205,11 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
                 availableSeats: vehicleData.totalSeats, // Initially all seats are available
                 departureLocation: vehicleData.departureLocation,
                 departureCity: vehicleData.departureCity,
+                departureTime,
                 destinationLocation: vehicleData.destinationLocation || null,
+                isPaidRide: vehicleData.isPaidRide || false,
+                pricePerKm: vehicleData.pricePerKm ? String(vehicleData.pricePerKm) : null,
+                estimatedDistance: vehicleData.estimatedDistance ? String(vehicleData.estimatedDistance) : null,
                 notes: vehicleData.notes || null,
               })
               .returning();
