@@ -7,6 +7,7 @@ import stripeRoutes from "./routes/stripe";
 import invoiceRoutes from "./routes/invoices";
 import eventRoutes from "./routes/events";
 import participantRoutes from "./routes/participants";
+import vehicleRoutes from "./routes/vehicles";
 import plansRoutes from "./routes/plans";
 import adminRoutes from "./routes/admin";
 import dashboardRoutes from "./routes/dashboard";
@@ -39,6 +40,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Participant management routes
   app.use('/api/participants', participantRoutes);
+
+  // Vehicle management routes
+  app.use('/api/vehicles', vehicleRoutes);
 
   // Plans routes (public access to view plans)
   app.use('/api/plans', plansRoutes);

@@ -5,6 +5,8 @@ import { eq, and, count, sql } from 'drizzle-orm';
 
 /**
  * Middleware to check if company can create more events
+ * For DECOUVERTE plan: 2 events per year (annual limit)
+ * For other plans: total event limit or unlimited
  */
 export async function checkEventLimit(req: Request, res: Response, next: NextFunction) {
   try {
@@ -14,10 +16,11 @@ export async function checkEventLimit(req: Request, res: Response, next: NextFun
       return res.status(403).json({ error: 'Utilisateur non associé à une entreprise' });
     }
 
-    // Get company's plan features
+    // Get company's plan features and tier
     const [planData] = await db
       .select({
         maxEvents: plans.features,
+        tier: plans.tier,
       })
       .from(companyPlanState)
       .innerJoin(plans, eq(companyPlanState.planId, plans.id))
@@ -30,27 +33,59 @@ export async function checkEventLimit(req: Request, res: Response, next: NextFun
 
     const features = planData.maxEvents as any;
     const maxEvents = features.maxEvents;
+    const planTier = planData.tier;
 
     // If unlimited (null), allow
     if (maxEvents === null) {
       return next();
     }
 
-    // Count current events
-    const [eventCount] = await db
-      .select({ count: count() })
-      .from(events)
-      .where(eq(events.companyId, companyId));
+    // For DECOUVERTE plan, check annual limit (2 events per year)
+    if (planTier === 'DECOUVERTE') {
+      const currentYear = new Date().getFullYear();
+      const startOfYear = new Date(currentYear, 0, 1);
+      const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59);
 
-    const currentCount = eventCount?.count || 0;
+      const [eventCount] = await db
+        .select({ count: count() })
+        .from(events)
+        .where(
+          and(
+            eq(events.companyId, companyId),
+            gte(events.createdAt, startOfYear),
+            lte(events.createdAt, endOfYear)
+          )
+        );
 
-    if (currentCount >= maxEvents) {
-      return res.status(403).json({
-        error: 'Limite d\'événements atteinte',
-        message: `Votre plan permet un maximum de ${maxEvents} événements. Passez à un plan supérieur pour en créer plus.`,
-        limit: maxEvents,
-        current: currentCount,
-      });
+      const currentCount = eventCount?.count || 0;
+
+      if (currentCount >= maxEvents) {
+        return res.status(403).json({
+          error: 'Limite d\'événements annuelle atteinte',
+          message: `Votre plan Découverte permet un maximum de ${maxEvents} événements par an. Vous avez déjà créé ${currentCount} événement(s) en ${currentYear}. Passez à un plan supérieur pour créer plus d'événements.`,
+          limit: maxEvents,
+          current: currentCount,
+          period: 'annual',
+          year: currentYear,
+        });
+      }
+    } else {
+      // For other plans, check total event limit
+      const [eventCount] = await db
+        .select({ count: count() })
+        .from(events)
+        .where(eq(events.companyId, companyId));
+
+      const currentCount = eventCount?.count || 0;
+
+      if (currentCount >= maxEvents) {
+        return res.status(403).json({
+          error: 'Limite d\'événements atteinte',
+          message: `Votre plan permet un maximum de ${maxEvents} événements au total. Passez à un plan supérieur pour en créer plus.`,
+          limit: maxEvents,
+          current: currentCount,
+        });
+      }
     }
 
     next();

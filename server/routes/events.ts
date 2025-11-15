@@ -1,15 +1,19 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
-import { events, eventParents, companies } from '@shared/schema';
+import { events, eventParents, companies, participants, vehicles } from '@shared/schema';
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { requireAuth } from '../auth/middleware';
 import { checkEventLimit } from '../middleware/planLimits';
 import { createInsertSchema } from 'drizzle-zod';
 import { z } from 'zod';
 import { generateEventQRCode } from '../services/qrcode';
-import { sendEventCreatedEmail } from '../services/email';
+import { sendEventCreatedEmail, sendParticipantInvitation } from '../services/email';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 const router = Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'default-secret';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 // Validation schemas
 const insertEventSchema = createInsertSchema(events).omit({
@@ -22,6 +26,24 @@ const insertEventSchema = createInsertSchema(events).omit({
 const createEventSchema = insertEventSchema.extend({
   // Override companyId validation - will be set from authenticated user
   companyId: z.string().optional(),
+  // Allow optional participants array for initial invitations
+  participants: z.array(z.object({
+    email: z.string().email(),
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    phone: z.string().optional(),
+    city: z.string().min(1),
+    role: z.enum(['driver', 'passenger']).default('passenger'),
+  })).optional(),
+  // Allow optional vehicles array
+  vehicles: z.array(z.object({
+    driverEmail: z.string().email(),
+    totalSeats: z.number().int().min(1),
+    departureLocation: z.string().min(1),
+    departureCity: z.string().min(1),
+    destinationLocation: z.string().optional(),
+    notes: z.string().optional(),
+  })).optional(),
 });
 
 const updateEventSchema = createEventSchema.partial();
@@ -29,6 +51,7 @@ const updateEventSchema = createEventSchema.partial();
 /**
  * POST /api/events
  * Create a new event (with plan limit check)
+ * Supports initial participants and vehicles
  */
 router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Response) => {
   try {
@@ -41,11 +64,19 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
     // Validate request body
     const validatedData = createEventSchema.parse(req.body);
 
-    // Override companyId with authenticated user's company
+    // Extract participants and vehicles
+    const { participants: initialParticipants, vehicles: initialVehicles, ...eventFields } = validatedData as any;
+
+    // Generate a unique public link slug
+    const publicLinkSlug = crypto.randomBytes(8).toString('hex');
+    const publicLink = `${BASE_URL}/events/${publicLinkSlug}/public`;
+
+    // Override companyId with authenticated user's company and add publicLink
     const eventData = {
-      ...validatedData,
+      ...eventFields,
       companyId: user.companyId,
       createdByUserId: user.userId,
+      publicLink,
     };
 
     // Create event
@@ -55,41 +86,124 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
       .returning();
 
     // Generate QR code for the event
+    let updatedEvent = event;
     try {
       const qrCode = await generateEventQRCode(event.id);
       
       // Update event with QR code
-      const [updatedEvent] = await db
+      [updatedEvent] = await db
         .update(events)
         .set({ qrCode })
         .where(eq(events.id, event.id))
         .returning();
-      
-      // Get company info for email
-      const [company] = await db
-        .select()
-        .from(companies)
-        .where(eq(companies.id, user.companyId!))
-        .limit(1);
-      
-      // Send confirmation email (non-blocking)
-      if (company) {
-        sendEventCreatedEmail({
-          company,
-          event: updatedEvent,
-          creatorEmail: user.email,
-        }).catch(err => console.error('Event created email error:', err));
-      }
-      
-      res.status(201).json({ event: updatedEvent });
     } catch (qrError) {
       console.error('Error generating QR code:', qrError);
-      // Return event even if QR code generation fails
-      res.status(201).json({ 
-        event,
-        warning: 'Événement créé mais QR code non généré' 
-      });
     }
+
+    // Get company info
+    const [company] = await db
+      .select()
+      .from(companies)
+      .where(eq(companies.id, user.companyId!))
+      .limit(1);
+
+    // Create initial participants if provided
+    const createdParticipants = [];
+    if (initialParticipants && Array.isArray(initialParticipants) && initialParticipants.length > 0) {
+      for (const participantData of initialParticipants) {
+        try {
+          const [participant] = await db
+            .insert(participants)
+            .values({
+              eventId: event.id,
+              email: participantData.email.toLowerCase(),
+              firstName: participantData.firstName,
+              lastName: participantData.lastName,
+              phone: participantData.phone || null,
+              city: participantData.city,
+              role: participantData.role || 'passenger',
+              status: 'pending',
+            })
+            .returning();
+
+          createdParticipants.push(participant);
+
+          // Generate invitation token and send email
+          if (company) {
+            const invitationToken = jwt.sign(
+              {
+                participantId: participant.id,
+                eventId: event.id,
+                email: participant.email,
+                type: 'participant_invitation',
+              },
+              JWT_SECRET,
+              { expiresIn: '30d' }
+            );
+
+            // Send invitation email (non-blocking)
+            sendParticipantInvitation({
+              company,
+              event: updatedEvent,
+              participant,
+              invitationToken,
+            }).catch(err => console.error('Participant invitation email error:', err));
+          }
+        } catch (partError) {
+          console.error('Error creating participant:', partError);
+        }
+      }
+    }
+
+    // Create initial vehicles if provided
+    const createdVehicles = [];
+    if (initialVehicles && Array.isArray(initialVehicles) && initialVehicles.length > 0) {
+      // First, we need to match vehicles with driver participants
+      for (const vehicleData of initialVehicles) {
+        try {
+          // Find the driver participant by email
+          const driver = createdParticipants.find(
+            p => p.email.toLowerCase() === vehicleData.driverEmail.toLowerCase() && p.role === 'driver'
+          );
+
+          if (driver) {
+            const [vehicle] = await db
+              .insert(vehicles)
+              .values({
+                eventId: event.id,
+                driverParticipantId: driver.id,
+                totalSeats: vehicleData.totalSeats,
+                availableSeats: vehicleData.totalSeats, // Initially all seats are available
+                departureLocation: vehicleData.departureLocation,
+                departureCity: vehicleData.departureCity,
+                destinationLocation: vehicleData.destinationLocation || null,
+                notes: vehicleData.notes || null,
+              })
+              .returning();
+
+            createdVehicles.push(vehicle);
+          }
+        } catch (vehError) {
+          console.error('Error creating vehicle:', vehError);
+        }
+      }
+    }
+      
+    // Send confirmation email (non-blocking)
+    if (company) {
+      sendEventCreatedEmail({
+        company,
+        event: updatedEvent,
+        creatorEmail: user.email,
+      }).catch(err => console.error('Event created email error:', err));
+    }
+      
+    res.status(201).json({ 
+      event: updatedEvent,
+      participants: createdParticipants,
+      vehicles: createdVehicles,
+      message: `Événement créé avec succès. ${createdParticipants.length} participant(s) invité(s).`,
+    });
   } catch (error: any) {
     console.error('Error creating event:', error);
     
@@ -301,6 +415,112 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error deleting event:', error);
     res.status(500).json({ error: 'Erreur serveur lors de la suppression de l\'événement' });
+  }
+});
+
+/**
+ * GET /api/events/public/:slug
+ * Get event details by public link slug (public endpoint - no auth required)
+ */
+router.get('/public/:slug', async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const publicLink = `${BASE_URL}/events/${slug}/public`;
+
+    // Fetch event by public link
+    const [event] = await db
+      .select()
+      .from(events)
+      .where(eq(events.publicLink, publicLink))
+      .limit(1);
+
+    if (!event) {
+      return res.status(404).json({ error: 'Événement introuvable' });
+    }
+
+    // Get company info (name only for public display)
+    const [company] = await db
+      .select({
+        name: companies.name,
+        city: companies.city,
+      })
+      .from(companies)
+      .where(eq(companies.id, event.companyId))
+      .limit(1);
+
+    // Get participants count
+    const eventParticipants = await db
+      .select()
+      .from(participants)
+      .where(eq(participants.eventId, event.id));
+
+    const stats = {
+      total: eventParticipants.length,
+      confirmed: eventParticipants.filter(p => p.status === 'confirmed').length,
+      drivers: eventParticipants.filter(p => p.role === 'driver' && p.status === 'confirmed').length,
+    };
+
+    res.json({
+      event: {
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        location: event.location,
+        city: event.city,
+        maxParticipants: event.maxParticipants,
+        status: event.status,
+        qrCode: event.qrCode,
+        publicLink: event.publicLink,
+      },
+      company: company || { name: 'Entreprise', city: '' },
+      stats,
+    });
+  } catch (error: any) {
+    console.error('Error fetching public event:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+/**
+ * GET /api/events/:id/share-info
+ * Get share information (QR code and public link) for an event
+ */
+router.get('/:id/share-info', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = req.user!;
+
+    if (!user.companyId) {
+      return res.status(403).json({ error: 'Utilisateur non associé à une entreprise' });
+    }
+
+    // Fetch event
+    const [event] = await db
+      .select()
+      .from(events)
+      .where(
+        and(
+          eq(events.id, id),
+          eq(events.companyId, user.companyId)
+        )
+      )
+      .limit(1);
+
+    if (!event) {
+      return res.status(404).json({ error: 'Événement introuvable' });
+    }
+
+    res.json({
+      qrCode: event.qrCode,
+      publicLink: event.publicLink,
+      eventId: event.id,
+      title: event.title,
+    });
+  } catch (error: any) {
+    console.error('Error fetching share info:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
