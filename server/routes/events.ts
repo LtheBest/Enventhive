@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
-import { events, eventParents, companies, participants, vehicles, companyPlanState, plans } from '@shared/schema';
+import { events, eventParents, companies, participants, vehicles, companyPlanState, plans, companyVehicles, eventVehicles } from '@shared/schema';
 import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { requireAuth } from '../auth/middleware';
 import { checkEventLimit } from '../middleware/planLimits';
@@ -44,6 +44,8 @@ const createEventSchema = insertEventSchema.extend({
     destinationLocation: z.string().optional(),
     notes: z.string().optional(),
   })).optional(),
+  // Allow optional company vehicle IDs array
+  companyVehicleIds: z.array(z.string().uuid()).optional(),
 });
 
 const updateEventSchema = createEventSchema.partial();
@@ -64,8 +66,8 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
     // Validate request body
     const validatedData = createEventSchema.parse(req.body);
 
-    // Extract participants and vehicles
-    const { participants: initialParticipants, vehicles: initialVehicles, ...eventFields } = validatedData as any;
+    // Extract participants, vehicles, and company vehicle IDs
+    const { participants: initialParticipants, vehicles: initialVehicles, companyVehicleIds: initialCompanyVehicleIds, ...eventFields } = validatedData as any;
 
     // Get company's plan to determine maxParticipants limit
     const [planData] = await db
@@ -206,6 +208,42 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
         }
       }
     }
+
+    // Link company vehicles to event if provided
+    const linkedCompanyVehicles = [];
+    if (initialCompanyVehicleIds && Array.isArray(initialCompanyVehicleIds) && initialCompanyVehicleIds.length > 0) {
+      for (const vehicleId of initialCompanyVehicleIds) {
+        try {
+          // Verify vehicle belongs to company
+          const [companyVehicle] = await db
+            .select()
+            .from(companyVehicles)
+            .where(
+              and(
+                eq(companyVehicles.id, vehicleId),
+                eq(companyVehicles.companyId, user.companyId!),
+                eq(companyVehicles.isActive, true)
+              )
+            )
+            .limit(1);
+
+          if (companyVehicle) {
+            const [eventVehicle] = await db
+              .insert(eventVehicles)
+              .values({
+                eventId: event.id,
+                companyVehicleId: vehicleId,
+                assignedDriverId: null,
+              })
+              .returning();
+
+            linkedCompanyVehicles.push(eventVehicle);
+          }
+        } catch (linkError) {
+          console.error('Error linking company vehicle to event:', linkError);
+        }
+      }
+    }
       
     // Send confirmation email (non-blocking)
     if (company) {
@@ -220,7 +258,8 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
       event: updatedEvent,
       participants: createdParticipants,
       vehicles: createdVehicles,
-      message: `Événement créé avec succès. ${createdParticipants.length} participant(s) invité(s).`,
+      companyVehicles: linkedCompanyVehicles,
+      message: `Événement créé avec succès. ${createdParticipants.length} participant(s) invité(s)${linkedCompanyVehicles.length > 0 ? `, ${linkedCompanyVehicles.length} véhicule(s) ajouté(s)` : ''}.`,
     });
   } catch (error: any) {
     console.error('Error creating event:', error);

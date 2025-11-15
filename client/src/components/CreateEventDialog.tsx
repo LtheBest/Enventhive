@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,9 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, Trash2, UserPlus, Car } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Trash2, UserPlus, Car, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 
 interface Participant {
   email: string;
@@ -35,6 +36,15 @@ interface Vehicle {
   notes?: string;
 }
 
+interface CompanyVehicle {
+  id: string;
+  name: string;
+  vehicleType: string;
+  licensePlate?: string;
+  totalSeats: number;
+  isActive: boolean;
+}
+
 export function CreateEventDialog() {
   const [open, setOpen] = useState(false);
   const [eventType, setEventType] = useState<"single" | "recurring">("single");
@@ -47,6 +57,7 @@ export function CreateEventDialog() {
   });
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [selectedCompanyVehicles, setSelectedCompanyVehicles] = useState<string[]>([]);
   const [newParticipant, setNewParticipant] = useState<Participant>({
     email: "",
     firstName: "",
@@ -56,9 +67,25 @@ export function CreateEventDialog() {
     role: "passenger",
   });
   const [showParticipantForm, setShowParticipantForm] = useState(false);
+  const [showVehicleSection, setShowVehicleSection] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Fetch company vehicles
+  const { data: companyVehiclesData } = useQuery({
+    queryKey: ['company-vehicles'],
+    queryFn: async () => {
+      const response = await fetch('/api/company-vehicles', {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Erreur lors du chargement des véhicules');
+      return response.json();
+    },
+    enabled: open,
+  });
+
+  const companyVehicles: CompanyVehicle[] = companyVehiclesData?.vehicles || [];
 
   const createEventMutation = useMutation({
     mutationFn: async (eventData: any) => {
@@ -104,6 +131,7 @@ export function CreateEventDialog() {
     });
     setParticipants([]);
     setVehicles([]);
+    setSelectedCompanyVehicles([]);
     setNewParticipant({
       email: "",
       firstName: "",
@@ -113,6 +141,7 @@ export function CreateEventDialog() {
       role: "passenger",
     });
     setShowParticipantForm(false);
+    setShowVehicleSection(false);
   };
 
   const addParticipant = () => {
@@ -144,18 +173,26 @@ export function CreateEventDialog() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Extract city from location (simplifié)
-    const cityFromLocation = formData.city || formData.location.split(',').pop()?.trim() || "";
+    if (!formData.title || !formData.date || !formData.location || !formData.city) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez remplir tous les champs obligatoires",
+        variant: "destructive",
+      });
+      return;
+    }
     
     const eventData = {
       title: formData.title,
       startDate: new Date(formData.date),
       location: formData.location,
-      city: cityFromLocation,
+      city: formData.city,
       description: formData.description || null,
       eventType: eventType,
+      maxParticipants: null,
       participants: participants.length > 0 ? participants : undefined,
       vehicles: vehicles.length > 0 ? vehicles : undefined,
+      companyVehicleIds: selectedCompanyVehicles.length > 0 ? selectedCompanyVehicles : undefined,
     };
     
     console.log('Creating event:', eventData);
@@ -345,6 +382,62 @@ export function CreateEventDialog() {
                 </div>
               )}
             </div>
+
+            {/* Company Vehicles Section */}
+            {companyVehicles.length > 0 && (
+              <div className="space-y-2 pt-4 border-t">
+                <div className="flex items-center justify-between">
+                  <Label>Véhicules d'entreprise (optionnel)</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowVehicleSection(!showVehicleSection)}
+                  >
+                    <Car className="h-4 w-4 mr-2" />
+                    {showVehicleSection ? 'Masquer' : 'Ajouter un véhicule'}
+                  </Button>
+                </div>
+
+                {showVehicleSection && (
+                  <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
+                    <Label>Sélectionner des véhicules</Label>
+                    <div className="space-y-2">
+                      {companyVehicles.filter(v => v.isActive).map((vehicle) => (
+                        <div key={vehicle.id} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`vehicle-${vehicle.id}`}
+                            checked={selectedCompanyVehicles.includes(vehicle.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedCompanyVehicles([...selectedCompanyVehicles, vehicle.id]);
+                              } else {
+                                setSelectedCompanyVehicles(selectedCompanyVehicles.filter(id => id !== vehicle.id));
+                              }
+                            }}
+                            className="h-4 w-4"
+                          />
+                          <label htmlFor={`vehicle-${vehicle.id}`} className="text-sm cursor-pointer flex-1">
+                            <span className="font-medium">{vehicle.name}</span>
+                            <span className="text-muted-foreground ml-2">({vehicle.vehicleType})</span>
+                            <span className="ml-2 text-xs">💺 {vehicle.totalSeats} places</span>
+                            {vehicle.licensePlate && (
+                              <span className="ml-2 text-xs text-muted-foreground">{vehicle.licensePlate}</span>
+                            )}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                    {selectedCompanyVehicles.length > 0 && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        {selectedCompanyVehicles.length} véhicule(s) sélectionné(s)
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
