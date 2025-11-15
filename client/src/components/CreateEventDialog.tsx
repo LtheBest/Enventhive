@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, UserPlus, Car, Loader2 } from "lucide-react";
+import { Plus, Trash2, UserPlus, Car, Loader2, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -59,6 +59,7 @@ export function CreateEventDialog() {
   const [showParticipantForm, setShowParticipantForm] = useState(false);
   const [showVehicleSection, setShowVehicleSection] = useState(false);
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -85,13 +86,35 @@ export function CreateEventDialog() {
       return response.json();
     },
     onSuccess: (data) => {
+      const eventTitle = formData.title;
+      const participantCount = participants.length;
+      
+      // Afficher un message de succès dans le dialog
+      setSuccessMessage(
+        `✅ L'événement "${eventTitle}" a été créé avec succès !${
+          participantCount > 0 
+            ? ` ${participantCount} invitation(s) email ont été envoyées.` 
+            : ''
+        }`
+      );
+      
+      // Toast notification
       toast({
-        title: "Événement créé !",
-        description: data.message || "L'événement a été créé avec succès.",
+        title: "✅ Événement créé !",
+        description: data.message || "L'événement a été créé avec succès. Vos participants vont recevoir leurs invitations par email.",
+        duration: 5000,
       });
-      queryClient.invalidateQueries({ queryKey: ['events'] });
-      setOpen(false);
-      resetForm();
+      
+      // Invalider toutes les requêtes d'événements pour rafraîchir le dashboard
+      queryClient.invalidateQueries({ queryKey: ['/api/events'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      
+      // Fermer le dialog après 2 secondes pour laisser le temps de voir le message
+      setTimeout(() => {
+        setOpen(false);
+        resetForm();
+        setSuccessMessage(null);
+      }, 2000);
     },
     onError: (error: Error) => {
       toast({
@@ -190,6 +213,22 @@ export function CreateEventDialog() {
               Configurez votre nouvel événement et invitez vos participants
             </DialogDescription>
           </DialogHeader>
+          
+          {/* Message de succès */}
+          {successMessage && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+              <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-green-800 font-medium">{successMessage}</p>
+                <p className="text-green-600 text-sm mt-1">
+                  Le dialog va se fermer automatiquement...
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {/* Formulaire - caché pendant l'affichage du succès */}
+          {!successMessage && (
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Type d'événement</Label>
@@ -418,6 +457,7 @@ export function CreateEventDialog() {
               </div>
             )}
           </div>
+          {!successMessage && (
           <DialogFooter>
             <Button
               type="button"
@@ -439,6 +479,7 @@ export function CreateEventDialog() {
               {createEventMutation.isPending ? "Création..." : "Créer l'événement"}
             </Button>
           </DialogFooter>
+          )}
         </form>
       </DialogContent>
     </Dialog>

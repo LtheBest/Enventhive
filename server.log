@@ -1,0 +1,172 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+✅ SendGrid initialized successfully
+2:24:41 PM [express] serving on port 5000
+
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+2:35:14 PM [express] GET /api/auth/me 401 in 8ms :: {"error":"Invalid or expired token"}
+2:35:14 PM [express] GET /api/plans/current-features 401 in 3ms :: {"error":"Invalid or expired toke…
+2:35:14 PM [express] POST /api/auth/refresh 400 in 1ms :: {"error":"Refresh token requis"}
+2:35:15 PM [express] GET /api/plans/current-features 401 in 1ms :: {"error":"No token provided"}
+2:35:18 PM [express] GET /api/security/captcha 200 in 3ms :: {"challenge":"4*10","token":"eyJhbGciOi…
+2:35:28 PM [express] POST /api/auth/login 200 in 216ms :: {"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cC…
+2:35:28 PM [express] GET /api/auth/me 304 in 38ms :: {"user":{"id":"8826609c-9a51-4ba0-bdd3-50b814c5…
+2:35:28 PM [express] GET /api/events 200 in 13ms :: {"events":[]}
+2:35:28 PM [express] GET /api/dashboard/stats 304 in 21ms :: {"company":{"id":"4ce5dad9-ab1e-4b39-bf…
+2:35:31 PM [express] GET /api/events 401 in 1ms :: {"error":"No token provided"}
+2:35:44 PM [express] GET /api/plans/current-features 304 in 35ms :: {"tier":"PRO","name":"Pro","feat…
+2:35:44 PM [express] GET /api/auth/me 304 in 52ms :: {"user":{"id":"8826609c-9a51-4ba0-bdd3-50b814c5…
+2:35:44 PM [express] GET /api/events 401 in 1ms :: {"error":"No token provided"}
+2:35:47 PM [express] GET /api/company-vehicles 200 in 7ms
+Creating event with body: {
+  "title": "team building",
+  "startDate": "2025-11-15T17:35:00.000Z",
+  "location": "1 Rue Lefèbvre 91350 Grigny",
+  "city": "Grigny",
+  "description": null,
+  "eventType": "single",
+  "maxParticipants": null
+}
+Error creating event: ZodError: [
+  {
+    "code": "invalid_type",
+    "expected": "date",
+    "received": "string",
+    "path": [
+      "startDate"
+    ],
+    "message": "Expected date, received string"
+  }
+]
+    at get error [as error] (file:///home/user/webapp/node_modules/zod/lib/index.mjs:587:31)
+    at ZodObject.parse (file:///home/user/webapp/node_modules/zod/lib/index.mjs:663:22)
+    at <anonymous> (/home/user/webapp/server/routes/events.ts:75:45)
+    at Layer.handle [as handle_request] (/home/user/webapp/node_modules/express/lib/router/layer.js:95:5)
+    at next (/home/user/webapp/node_modules/express/lib/router/route.js:149:13)
+    at checkEventLimit (/home/user/webapp/server/middleware/planLimits.ts:40:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+  issues: [
+    {
+      code: 'invalid_type',
+      expected: 'date',
+      received: 'string',
+      path: [Array],
+      message: 'Expected date, received string'
+    }
+  ],
+  addIssue: [Function (anonymous)],
+  addIssues: [Function (anonymous)],
+  errors: [
+    {
+      code: 'invalid_type',
+      expected: 'date',
+      received: 'string',
+      path: [Array],
+      message: 'Expected date, received string'
+    }
+  ]
+}
+Error details: {
+  "issues": [
+    {
+      "code": "invalid_type",
+      "expected": "date",
+      "received": "string",
+      "path": [
+        "startDate"
+      ],
+      "message": "Expected date, received string"
+    }
+  ],
+  "name": "ZodError"
+}
+Zod validation errors: [
+  {
+    "code": "invalid_type",
+    "expected": "date",
+    "received": "string",
+    "path": [
+      "startDate"
+    ],
+    "message": "Expected date, received string"
+  }
+]
+2:36:12 PM [express] POST /api/events 400 in 36ms :: {"error":"Données invalides","details":[{"code"…
+2:36:44 PM [express] GET /api/auth/me 304 in 43ms :: {"user":{"id":"8826609c-9a51-4ba0-bdd3-50b814c5…
+Creating event with body: {
+  "title": "team building",
+  "startDate": "2025-11-15T17:35:00.000Z",
+  "location": "1 Rue Lefèbvre 91350 Grigny",
+  "city": "Grigny",
+  "description": null,
+  "eventType": "single",
+  "maxParticipants": null
+}
+Error creating event: ZodError: [
+  {
+    "code": "invalid_type",
+    "expected": "date",
+    "received": "string",
+    "path": [
+      "startDate"
+    ],
+    "message": "Expected date, received string"
+  }
+]
+    at get error [as error] (file:///home/user/webapp/node_modules/zod/lib/index.mjs:587:31)
+    at ZodObject.parse (file:///home/user/webapp/node_modules/zod/lib/index.mjs:663:22)
+    at <anonymous> (/home/user/webapp/server/routes/events.ts:75:45)
+    at Layer.handle [as handle_request] (/home/user/webapp/node_modules/express/lib/router/layer.js:95:5)
+    at next (/home/user/webapp/node_modules/express/lib/router/route.js:149:13)
+    at checkEventLimit (/home/user/webapp/server/middleware/planLimits.ts:40:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+  issues: [
+    {
+      code: 'invalid_type',
+      expected: 'date',
+      received: 'string',
+      path: [Array],
+      message: 'Expected date, received string'
+    }
+  ],
+  addIssue: [Function (anonymous)],
+  addIssues: [Function (anonymous)],
+  errors: [
+    {
+      code: 'invalid_type',
+      expected: 'date',
+      received: 'string',
+      path: [Array],
+      message: 'Expected date, received string'
+    }
+  ]
+}
+Error details: {
+  "issues": [
+    {
+      "code": "invalid_type",
+      "expected": "date",
+      "received": "string",
+      "path": [
+        "startDate"
+      ],
+      "message": "Expected date, received string"
+    }
+  ],
+  "name": "ZodError"
+}
+Zod validation errors: [
+  {
+    "code": "invalid_type",
+    "expected": "date",
+    "received": "string",
+    "path": [
+      "startDate"
+    ],
+    "message": "Expected date, received string"
+  }
+]
+2:37:31 PM [express] POST /api/events 400 in 22ms :: {"error":"Données invalides","details":[{"code"…
+2:37:44 PM [express] GET /api/auth/me 304 in 49ms :: {"user":{"id":"8826609c-9a51-4ba0-bdd3-50b814c5…
