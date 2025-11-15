@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar, Users, Car, TrendingUp, Plus, Settings, CreditCard, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 import { usePlanFeatures } from "@/contexts/PlanFeaturesContext";
@@ -34,9 +36,14 @@ export default function CompanyDashboard() {
     queryKey: ['/api/dashboard/stats'],
   });
 
-  const { data: recentEvents, isLoading: eventsLoading } = useQuery({
-    queryKey: ['/api/events', { limit: 5 }],
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const { data: recentEventsData, isLoading: eventsLoading } = useQuery({
+    queryKey: ['/api/events', statusFilter !== 'all' ? { status: statusFilter, limit: 50 } : { limit: 50 }],
   });
+
+  // Extract events array from response
+  const allEvents = recentEventsData?.events || [];
 
   const { planData, getLimit, canAddMore, isLoading: planLoading } = usePlanFeatures();
 
@@ -217,8 +224,8 @@ export default function CompanyDashboard() {
           </Card>
         </div>
 
-        {/* Quick Actions & Recent Events */}
-        <div className="grid gap-6 lg:grid-cols-2">
+        {/* Quick Actions & Events */}
+        <div className="grid gap-6 lg:grid-cols-3">
           {/* Quick Actions */}
           <Card>
             <CardHeader>
@@ -249,46 +256,84 @@ export default function CompanyDashboard() {
             </CardContent>
           </Card>
 
-          {/* Recent Events */}
-          <Card>
+          {/* Events with Filters */}
+          <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Événements récents</CardTitle>
-              <CardDescription>Vos derniers événements créés</CardDescription>
+              <CardTitle>Vos événements</CardTitle>
+              <CardDescription>Filtrez vos événements par statut</CardDescription>
             </CardHeader>
             <CardContent>
-              {eventsLoading ? (
-                <p className="text-sm text-muted-foreground">Chargement...</p>
-              ) : recentEvents && Array.isArray(recentEvents) && recentEvents.length > 0 ? (
-                <div className="space-y-3">
-                  {recentEvents.slice(0, 5).map((event: any) => (
-                    <div
-                      key={event.id}
-                      className="flex items-center justify-between p-2 rounded-md hover-elevate"
-                      data-testid={`event-item-${event.id}`}
-                    >
-                      <div>
-                        <p className="font-medium text-sm">{event.title || event.name}</p>
-                        <p className="text-xs text-muted-foreground">{event.city}</p>
-                      </div>
-                      <Link href={`/events/${event.id}`}>
-                        <Button size="sm" variant="ghost">Voir</Button>
-                      </Link>
+              <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="all">Tous</TabsTrigger>
+                  <TabsTrigger value="upcoming">À venir</TabsTrigger>
+                  <TabsTrigger value="ongoing">En cours</TabsTrigger>
+                  <TabsTrigger value="completed">Terminés</TabsTrigger>
+                </TabsList>
+                <TabsContent value={statusFilter} className="mt-4">
+                  {eventsLoading ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">Chargement...</p>
+                  ) : allEvents.length > 0 ? (
+                    <div className="space-y-3">
+                      {allEvents.slice(0, 10).map((event: any) => (
+                        <div
+                          key={event.id}
+                          className="flex items-center justify-between p-3 rounded-md border hover:bg-muted/50 transition-colors"
+                          data-testid={`event-item-${event.id}`}
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm">{event.title || event.name}</p>
+                              <Badge variant={
+                                event.status === 'upcoming' ? 'default' :
+                                event.status === 'ongoing' ? 'secondary' :
+                                event.status === 'completed' ? 'outline' : 'default'
+                              }>
+                                {event.status === 'upcoming' ? 'À venir' :
+                                 event.status === 'ongoing' ? 'En cours' :
+                                 event.status === 'completed' ? 'Terminé' :
+                                 event.status === 'cancelled' ? 'Annulé' : event.status}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {event.city} • {new Date(event.startDate).toLocaleDateString('fr-FR', { 
+                                day: 'numeric', 
+                                month: 'long', 
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                          <Link href={`/events/${event.id}`}>
+                            <Button size="sm" variant="ghost">Voir</Button>
+                          </Link>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-6">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Aucun événement créé
-                  </p>
-                  <Link href="/events/new">
-                    <Button size="sm" data-testid="button-create-first-event">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Créer votre premier événement
-                    </Button>
-                  </Link>
-                </div>
-              )}
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {statusFilter === 'all' 
+                          ? "Aucun événement créé" 
+                          : `Aucun événement ${
+                              statusFilter === 'upcoming' ? 'à venir' :
+                              statusFilter === 'ongoing' ? 'en cours' :
+                              statusFilter === 'completed' ? 'terminé' : ''
+                            }`}
+                      </p>
+                      {statusFilter === 'all' && (
+                        <Link href="/events/new">
+                          <Button size="sm" data-testid="button-create-first-event">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Créer votre premier événement
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>
