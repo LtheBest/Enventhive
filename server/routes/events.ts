@@ -26,7 +26,9 @@ const insertEventSchema = createInsertSchema(events).omit({
 const createEventSchema = insertEventSchema.extend({
   // Override companyId validation - will be set from authenticated user
   companyId: z.string().optional(),
-  // Allow optional participants array for initial invitations
+  // Allow optional participant emails for sending invitations
+  participantEmails: z.array(z.string().email()).optional(),
+  // Legacy: Allow optional participants array for backward compatibility
   participants: z.array(z.object({
     email: z.string().email(),
     firstName: z.string().min(1),
@@ -70,8 +72,22 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
     // Validate request body
     const validatedData = createEventSchema.parse(req.body);
 
-    // Extract participants, vehicles, and company vehicle IDs
-    const { participants: initialParticipants, vehicles: initialVehicles, companyVehicleIds: initialCompanyVehicleIds, ...eventFields } = validatedData as any;
+    // Extract participants, participantEmails, vehicles, and company vehicle IDs
+    const { participants: initialParticipants, participantEmails, vehicles: initialVehicles, companyVehicleIds: initialCompanyVehicleIds, ...eventFields } = validatedData as any;
+    
+    // Convert participantEmails to participants format if provided
+    let participantsToCreate = initialParticipants || [];
+    if (participantEmails && Array.isArray(participantEmails) && participantEmails.length > 0) {
+      // For email-only invitations, create minimal participant records
+      // Full details will be collected when they register via the public link
+      participantsToCreate = participantEmails.map((email: string) => ({
+        email: email.toLowerCase(),
+        firstName: 'Invité', // Placeholder - will be updated when they register
+        lastName: '', // Placeholder
+        city: '', // Will be collected during registration
+        role: 'passenger', // Default role
+      }));
+    }
 
     // Get company's plan to determine maxParticipants limit
     const [planData] = await db
@@ -133,8 +149,8 @@ router.post('/', requireAuth, checkEventLimit, async (req: Request, res: Respons
 
     // Create initial participants if provided
     const createdParticipants = [];
-    if (initialParticipants && Array.isArray(initialParticipants) && initialParticipants.length > 0) {
-      for (const participantData of initialParticipants) {
+    if (participantsToCreate && Array.isArray(participantsToCreate) && participantsToCreate.length > 0) {
+      for (const participantData of participantsToCreate) {
         try {
           const [participant] = await db
             .insert(participants)

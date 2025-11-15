@@ -17,14 +17,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, UserPlus, Car, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useAddressAutocomplete } from "@/hooks/use-address-autocomplete";
 
 interface Participant {
   email: string;
-  firstName: string;
-  lastName: string;
-  phone?: string;
-  city: string;
-  role: "driver" | "passenger";
 }
 
 interface Vehicle {
@@ -58,19 +55,14 @@ export function CreateEventDialog() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selectedCompanyVehicles, setSelectedCompanyVehicles] = useState<string[]>([]);
-  const [newParticipant, setNewParticipant] = useState<Participant>({
-    email: "",
-    firstName: "",
-    lastName: "",
-    phone: "",
-    city: "",
-    role: "passenger",
-  });
+  const [newParticipantEmail, setNewParticipantEmail] = useState("");
   const [showParticipantForm, setShowParticipantForm] = useState(false);
   const [showVehicleSection, setShowVehicleSection] = useState(false);
+  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const addressAutocomplete = useAddressAutocomplete();
 
   // Fetch company vehicles
   const { data: companyVehiclesData } = useQuery({
@@ -89,18 +81,7 @@ export function CreateEventDialog() {
 
   const createEventMutation = useMutation({
     mutationFn: async (eventData: any) => {
-      const response = await fetch('/api/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(eventData),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Erreur lors de la création');
-      }
-      
+      const response = await apiRequest('POST', '/api/events', eventData);
       return response.json();
     },
     onSuccess: (data) => {
@@ -132,38 +113,32 @@ export function CreateEventDialog() {
     setParticipants([]);
     setVehicles([]);
     setSelectedCompanyVehicles([]);
-    setNewParticipant({
-      email: "",
-      firstName: "",
-      lastName: "",
-      phone: "",
-      city: "",
-      role: "passenger",
-    });
+    setNewParticipantEmail("");
     setShowParticipantForm(false);
     setShowVehicleSection(false);
   };
 
   const addParticipant = () => {
-    if (!newParticipant.email || !newParticipant.firstName || !newParticipant.lastName || !newParticipant.city) {
+    if (!newParticipantEmail || !newParticipantEmail.includes('@')) {
       toast({
         title: "Erreur",
-        description: "Veuillez remplir tous les champs obligatoires",
+        description: "Veuillez entrer un email valide",
         variant: "destructive",
       });
       return;
     }
     
-    setParticipants([...participants, newParticipant]);
-    setNewParticipant({
-      email: "",
-      firstName: "",
-      lastName: "",
-      phone: "",
-      city: "",
-      role: "passenger",
-    });
-    setShowParticipantForm(false);
+    if (participants.some(p => p.email === newParticipantEmail)) {
+      toast({
+        title: "Erreur",
+        description: "Cet email a déjà été ajouté",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setParticipants([...participants, { email: newParticipantEmail }]);
+    setNewParticipantEmail("");
   };
 
   const removeParticipant = (index: number) => {
@@ -190,7 +165,7 @@ export function CreateEventDialog() {
       description: formData.description || null,
       eventType: eventType,
       maxParticipants: null,
-      participants: participants.length > 0 ? participants : undefined,
+      participantEmails: participants.length > 0 ? participants.map(p => p.email) : undefined,
       vehicles: vehicles.length > 0 ? vehicles : undefined,
       companyVehicleIds: selectedCompanyVehicles.length > 0 ? selectedCompanyVehicles : undefined,
     };
@@ -257,16 +232,52 @@ export function CreateEventDialog() {
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <Label htmlFor="location">Adresse complète</Label>
               <Input
                 id="location"
-                placeholder="1 rue Lefebvre, 91350 Grigny"
+                placeholder="Commencez à taper une adresse..."
                 value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFormData({ ...formData, location: value });
+                  addressAutocomplete.search(value);
+                  setShowAddressSuggestions(true);
+                }}
+                onFocus={() => {
+                  if (addressAutocomplete.suggestions.length > 0) {
+                    setShowAddressSuggestions(true);
+                  }
+                }}
                 data-testid="input-event-location"
                 required
               />
+              {showAddressSuggestions && addressAutocomplete.suggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                  {addressAutocomplete.suggestions.map((suggestion, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="w-full text-left px-4 py-2 hover:bg-muted text-sm"
+                      onClick={() => {
+                        setFormData({ 
+                          ...formData, 
+                          location: suggestion.properties.label,
+                          city: suggestion.properties.city || suggestion.properties.name,
+                        });
+                        setShowAddressSuggestions(false);
+                        addressAutocomplete.clear();
+                      }}
+                    >
+                      <div className="font-medium">{suggestion.properties.label}</div>
+                      <div className="text-xs text-muted-foreground">{suggestion.properties.context}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {addressAutocomplete.isLoading && (
+                <p className="text-xs text-muted-foreground mt-1">Recherche en cours...</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -310,52 +321,22 @@ export function CreateEventDialog() {
 
               {showParticipantForm && (
                 <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="flex gap-2">
                     <Input
-                      placeholder="Prénom"
-                      value={newParticipant.firstName}
-                      onChange={(e) => setNewParticipant({ ...newParticipant, firstName: e.target.value })}
+                      type="email"
+                      placeholder="email@exemple.com"
+                      value={newParticipantEmail}
+                      onChange={(e) => setNewParticipantEmail(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addParticipant())}
+                      className="flex-1"
                     />
-                    <Input
-                      placeholder="Nom"
-                      value={newParticipant.lastName}
-                      onChange={(e) => setNewParticipant({ ...newParticipant, lastName: e.target.value })}
-                    />
+                    <Button type="button" onClick={addParticipant}>
+                      Ajouter
+                    </Button>
                   </div>
-                  <Input
-                    type="email"
-                    placeholder="Email"
-                    value={newParticipant.email}
-                    onChange={(e) => setNewParticipant({ ...newParticipant, email: e.target.value })}
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      placeholder="Téléphone (optionnel)"
-                      value={newParticipant.phone}
-                      onChange={(e) => setNewParticipant({ ...newParticipant, phone: e.target.value })}
-                    />
-                    <Input
-                      placeholder="Ville"
-                      value={newParticipant.city}
-                      onChange={(e) => setNewParticipant({ ...newParticipant, city: e.target.value })}
-                    />
-                  </div>
-                  <RadioGroup
-                    value={newParticipant.role}
-                    onValueChange={(value) => setNewParticipant({ ...newParticipant, role: value as "driver" | "passenger" })}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="passenger" id="passenger" />
-                      <Label htmlFor="passenger" className="font-normal">Passager</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="driver" id="driver" />
-                      <Label htmlFor="driver" className="font-normal">Conducteur</Label>
-                    </div>
-                  </RadioGroup>
-                  <Button type="button" onClick={addParticipant} className="w-full">
-                    Ajouter
-                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Les participants recevront une invitation par email avec un lien pour rejoindre l'événement
+                  </p>
                 </div>
               )}
 
@@ -365,9 +346,7 @@ export function CreateEventDialog() {
                   {participants.map((p, i) => (
                     <div key={i} className="flex items-center justify-between p-2 border rounded">
                       <div className="text-sm">
-                        <span className="font-medium">{p.firstName} {p.lastName}</span>
-                        <span className="text-muted-foreground ml-2">({p.email})</span>
-                        <span className="ml-2 text-xs">{p.role === "driver" ? "🚗 Conducteur" : "👤 Passager"}</span>
+                        <span className="font-medium">{p.email}</span>
                       </div>
                       <Button
                         type="button"
